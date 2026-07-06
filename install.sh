@@ -2,7 +2,7 @@
 set -euo pipefail
 
 DOTFILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-FILES=(.zshrc .gitconfig .tmux.conf)
+FILES=(.zshrc .tmux.conf)
 
 for file in "${FILES[@]}"; do
   src="$DOTFILES_DIR/$file"
@@ -18,6 +18,15 @@ for file in "${FILES[@]}"; do
   ln -s "$src" "$dest"
   echo "Linked $dest -> $src"
 done
+
+# .gitconfig is NOT symlinked: devbox bakes auth (a token url.insteadOf rewrite)
+# and git identity directly into ~/.gitconfig on provisioning. Symlinking over
+# the whole file wipes that out and breaks git push/pull. Apply only specific
+# preferences instead, which edits ~/.gitconfig in place and leaves devbox's
+# own entries alone.
+git config --global core.editor vim
+git config --global pull.rebase false
+git config --global init.defaultBranch main
 
 VSCODE_EXTENSIONS=(vscodevim.vim)
 
