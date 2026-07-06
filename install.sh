@@ -19,4 +19,15 @@ for file in "${FILES[@]}"; do
   echo "Linked $dest -> $src"
 done
 
+VSCODE_EXTENSIONS=(vscodevim.vim)
+
+for cli in code code-server; do
+  if command -v "$cli" &>/dev/null; then
+    for ext in "${VSCODE_EXTENSIONS[@]}"; do
+      "$cli" --install-extension "$ext" --force
+      echo "Installed $ext via $cli"
+    done
+  fi
+done
+
 echo "Dotfiles installed."

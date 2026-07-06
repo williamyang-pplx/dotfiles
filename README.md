@@ -1,6 +1,8 @@
 # dotfiles
 
 Personal shell/tmux/git config, symlinked into place by `install.sh`.
+Also installs the [VSCodeVim](https://marketplace.visualstudio.com/items?itemName=vscodevim.vim)
+extension for `code` (Remote-SSH) and `code-server` (VSCode Web), whichever is present.
 
 ## Manual install
 
@@ -19,4 +21,4 @@ devbox config user dotfiles set https://github.com/williamyang-pplx/dotfiles --b
 
 Note: devbox already pre-configures git identity and GitHub auth on its own
 (see `docs/dev-guide/01-devbox.md` in the `agi` repo) — the `.gitconfig` here
-only adds `[core]`/`[alias]` preferences on top of that, not auth.
+only adds `[core]`/`[pull]`/`[init]` preferences on top of that, not auth.
