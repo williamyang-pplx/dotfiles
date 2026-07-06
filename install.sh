@@ -28,6 +28,24 @@ git config --global core.editor vim
 git config --global pull.rebase false
 git config --global init.defaultBranch main
 
+VSCODE_SETTINGS_TARGETS=(
+  "$HOME/.vscode-server/data/Machine/settings.json"
+  "$HOME/.local/share/code-server/User/settings.json"
+)
+
+for dest in "${VSCODE_SETTINGS_TARGETS[@]}"; do
+  mkdir -p "$(dirname "$dest")"
+  if [[ -L "$dest" ]]; then
+    rm "$dest"
+  elif [[ -e "$dest" ]]; then
+    mv "$dest" "$dest.bak"
+    echo "Backed up existing $dest to $dest.bak"
+  fi
+
+  ln -s "$DOTFILES_DIR/vscode-settings.json" "$dest"
+  echo "Linked $dest -> $DOTFILES_DIR/vscode-settings.json"
+done
+
 VSCODE_EXTENSIONS=(vscodevim.vim)
 
 for cli in code code-server; do
