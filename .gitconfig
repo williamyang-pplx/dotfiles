@@ -1,0 +1,22 @@
+[user]
+	name = williamyang-pplx
+	email = william.yang@perplexity.ai
+
+[core]
+	editor = vim
+
+[pull]
+	rebase = false
+
+[init]
+	defaultBranch = main
+
+[alias]
+	st = status
+	co = checkout
+	br = branch
+	lg = log --oneline --graph --decorate --all
+
+# Note: devbox pre-configures GitHub auth (gh) and git identity on its own,
+# including a token-based url.insteadOf rewrite for github.com. That's
+# box-managed and box-specific — don't copy it into this file.
