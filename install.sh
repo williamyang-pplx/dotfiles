@@ -57,4 +57,18 @@ for cli in code code-server; do
   fi
 done
 
+# System packages (devbox images are Debian-based; apt with passwordless sudo).
+APT_PACKAGES=(fzf)
+
+missing=()
+for pkg in "${APT_PACKAGES[@]}"; do
+  dpkg -s "$pkg" &>/dev/null || missing+=("$pkg")
+done
+
+if (( ${#missing[@]} )); then
+  sudo apt-get update -qq
+  sudo apt-get install -y "${missing[@]}"
+  echo "Installed apt packages: ${missing[*]}"
+fi
+
 echo "Dotfiles installed."

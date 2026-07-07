@@ -28,4 +28,16 @@ alias gs='git status'
 alias gd='git diff'
 alias gco='git checkout'
 
+# fzf: Ctrl-R history search, Ctrl-T file finder, Alt-C cd, tab completion
+if command -v fzf &>/dev/null; then
+  if fzf --zsh &>/dev/null; then
+    source <(fzf --zsh)
+  else
+    for f in /usr/share/doc/fzf/examples/key-bindings.zsh \
+             /usr/share/doc/fzf/examples/completion.zsh; do
+      [[ -f "$f" ]] && source "$f"
+    done
+  fi
+fi
+
 # Personal customizations below

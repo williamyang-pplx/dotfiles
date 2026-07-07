@@ -3,7 +3,9 @@
 Personal shell/tmux config, symlinked into place by `install.sh`. Git preferences are
 applied via targeted `git config --global` calls instead (see below). Also installs the
 [VSCodeVim](https://marketplace.visualstudio.com/items?itemName=vscodevim.vim) extension
-for `code` (Remote-SSH) and `code-server` (VSCode Web), whichever is present.
+for `code` (Remote-SSH) and `code-server` (VSCode Web), whichever is present, and the
+[`fzf`](https://github.com/junegunn/fzf) fuzzy finder via `apt` (with zsh key bindings and
+completion wired into `.zshrc`).
 
 ## Manual install
 
