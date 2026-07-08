@@ -78,4 +78,13 @@ if [[ $- == *i* && ! -f ~/.cache/dotfiles/mcp-registered ]] \
   unset _dotfiles_dir
 fi
 
+# Drop the zsh->bash handoff guard once we've actually landed in bash. It has
+# to be exported (so it survives the exec from zsh), but that means tmux's
+# server bakes it into its global environment table the first time a session
+# starts under it, and hands that stale value to every later pane/window.
+# Those fresh zsh shells then see the guard already set and never hand off,
+# leaving the pane stuck in zsh (where this bash-only file errors if sourced
+# manually). Unsetting here keeps it out of the environment tmux captures.
+unset DOTFILES_ZSH_HANDOFF
+
 # Personal customizations below
