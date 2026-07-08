@@ -64,4 +64,18 @@ if command -v fzf &>/dev/null; then
   fi
 fi
 
+# Coding-agent MCP servers (deferred registration).
+# install.sh can't register these: devbox replays dotfiles during provisioning,
+# *before* claude/codex are installed, so `command -v claude` fails there and
+# the registration is silently skipped. Do it here instead, on interactive
+# shell startup, once the CLIs exist. One-shot: mcp-setup.sh writes a sentinel
+# on success and we skip thereafter. Re-run ~/.dotfiles/mcp-setup.sh (or delete
+# the sentinel) to pick up a newly installed agent CLI.
+if [[ $- == *i* && ! -f ~/.cache/dotfiles/mcp-registered ]] \
+   && { command -v claude || command -v codex; } &>/dev/null; then
+  _dotfiles_dir="$(dirname "$(readlink -f "${BASH_SOURCE[0]}" 2>/dev/null)")"
+  [[ -x "$_dotfiles_dir/mcp-setup.sh" ]] && "$_dotfiles_dir/mcp-setup.sh"
+  unset _dotfiles_dir
+fi
+
 # Personal customizations below

@@ -2,7 +2,9 @@
 set -euo pipefail
 
 DOTFILES_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-FILES=(.bashrc .tmux.conf)
+# .zshrc is symlinked too: the devbox default login shell is zsh, and our
+# .zshrc hands interactive sessions off to bash (where the real config lives).
+FILES=(.bashrc .zshrc .tmux.conf)
 
 for file in "${FILES[@]}"; do
   src="$DOTFILES_DIR/$file"
@@ -73,8 +75,14 @@ VSCODE_EXTENSIONS=(vscodevim.vim)
 for cli in code code-server; do
   if command -v "$cli" &>/dev/null; then
     for ext in "${VSCODE_EXTENSIONS[@]}"; do
-      "$cli" --install-extension "$ext" --force
-      echo "Installed $ext via $cli"
+      # Non-fatal: code-server's extension gallery may not be reachable during
+      # provisioning. Don't let a failed install abort the script (which would
+      # mark the devbox degraded and skip everything after this).
+      if "$cli" --install-extension "$ext" --force; then
+        echo "Installed $ext via $cli"
+      else
+        echo "warn: failed to install $ext via $cli (skipping)" >&2
+      fi
     done
   fi
 done
@@ -93,55 +101,10 @@ if (( ${#missing[@]} )); then
   echo "Installed apt packages: ${missing[*]}"
 fi
 
-# --- MCP servers for the coding agents (Claude Code + Codex) ---
-# Remote, OAuth-backed MCP servers. This registers them idempotently; the
-# one-time OAuth *login* is interactive (opens a browser) and cannot be
-# scripted, so it's a manual follow-up step printed at the end.
-#   name|url
-MCP_SERVERS=(
-  "notion|https://mcp.notion.com/mcp"
-  "linear|https://mcp.linear.app/mcp"
-  "gmail|https://gmailmcp.googleapis.com/mcp/v1"
-  "gcalendar|https://calendarmcp.googleapis.com/mcp/v1"
-  "gdrive|https://drivemcp.googleapis.com/mcp/v1"
-)
-
-if command -v claude &>/dev/null; then
-  for entry in "${MCP_SERVERS[@]}"; do
-    name="${entry%%|*}"; url="${entry#*|}"
-    if claude mcp get "$name" &>/dev/null; then
-      echo "claude: MCP '$name' already registered, skipping"
-    elif claude mcp add --scope user --transport http "$name" "$url"; then
-      echo "claude: registered MCP '$name'"
-    else
-      echo "claude: failed to register MCP '$name' (add it manually later)"
-    fi
-  done
-fi
-
-if command -v codex &>/dev/null; then
-  for entry in "${MCP_SERVERS[@]}"; do
-    name="${entry%%|*}"; url="${entry#*|}"
-    if codex mcp get "$name" &>/dev/null; then
-      echo "codex: MCP '$name' already registered, skipping"
-    elif codex mcp add "$name" --url "$url"; then
-      echo "codex: registered MCP '$name'"
-    else
-      echo "codex: failed to register MCP '$name' (add it manually later)"
-    fi
-  done
-fi
-
-if command -v claude &>/dev/null || command -v codex &>/dev/null; then
-  cat <<'EOF'
-
-MCP servers registered. Complete the one-time OAuth login per tool:
-  - Claude Code: run `claude`, then `/mcp` and authenticate each server.
-  - Codex:       run `codex mcp login <name>` for each server.
-Notion and Linear log in with a plain browser OAuth flow. The Google
-(gmail/gcalendar/gdrive) servers additionally require your own Google Cloud
-OAuth client ID/secret — see README for details.
-EOF
-fi
+# MCP server registration is intentionally NOT done here. devbox replays
+# dotfiles during provisioning, *before* claude/codex are installed, so any
+# `claude mcp add` at this point is a silent no-op (command -v fails). It's
+# handled instead by mcp-setup.sh, invoked from ~/.bashrc on interactive shell
+# startup once the agent CLIs actually exist. See mcp-setup.sh for details.
 
 echo "Dotfiles installed."

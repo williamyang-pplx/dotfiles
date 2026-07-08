@@ -1,13 +1,23 @@
 # dotfiles
 
 Personal shell/tmux config for Perplexity Linux devboxes, symlinked into place by
-`install.sh`. The interactive shell is bash (`.bashrc`) — devboxes run Linux. Git
+`install.sh`. The interactive shell is bash (`.bashrc`); the devbox default login
+shell is zsh, so `.zshrc` hands interactive sessions off to bash (see below). Git
 preferences are applied via targeted `git config --global` calls instead (see below).
 Also installs the
 [VSCodeVim](https://marketplace.visualstudio.com/items?itemName=vscodevim.vim) extension
 for `code` (Remote-SSH) and `code-server` (VSCode Web), whichever is present, and the
 [`fzf`](https://github.com/junegunn/fzf) fuzzy finder via `apt` (with bash key bindings and
 completion wired into `.bashrc`).
+
+## Shell: zsh → bash handoff
+
+Devboxes default to **zsh** as the login shell, but this config targets bash. `.zshrc`
+is symlinked in and, for interactive sessions, immediately `exec bash` so `.bashrc`
+loads. This is safe because devbox sets up the login environment (PATH, direnv, AWS,
+greeter) in the *system* zsh files (`/etc/zsh/zprofile` → `/etc/profile`) which run
+before `~/.zshrc`, so bash inherits a fully-configured environment. Non-interactive zsh
+(scripts, `devbox exec`, managed agent tooling) is left alone.
 
 ## Shell aliases
 
@@ -27,8 +37,17 @@ keybinding file only takes effect in **code-server** (VSCode Web); for Remote-SS
 
 ## MCP servers (Claude Code + Codex)
 
-`install.sh` registers remote MCP servers for Notion, Linear, and Google Workspace
-(Gmail/Calendar/Drive) in both `claude` and `codex`, if those CLIs are present.
+`mcp-setup.sh` registers remote MCP servers for Notion, Linear, and Google Workspace
+(Gmail/Calendar/Drive) in `claude` and `codex`, whichever is present.
+
+**Why not in `install.sh`?** devbox replays dotfiles during provisioning, *before*
+`claude`/`codex` are installed, so a `claude mcp add` there is a silent no-op (and the
+box still comes up `running`, hiding the miss). Instead, `.bashrc` runs `mcp-setup.sh`
+on interactive shell startup once the CLIs exist. It's idempotent and one-shot: it
+writes `~/.cache/dotfiles/mcp-registered` after a clean pass and is skipped thereafter.
+To re-register after installing a new agent CLI, run `~/.dotfiles/mcp-setup.sh` or
+`rm ~/.cache/dotfiles/mcp-registered`.
+
 Registration is idempotent; the one-time OAuth login is interactive and must be done
 manually afterward:
 
@@ -39,7 +58,7 @@ Notion and Linear use a plain browser OAuth flow that works out of the box. The 
 Workspace servers additionally require **your own** Google Cloud OAuth client ID/secret
 (create a Web-application OAuth client, enable the Gmail/Calendar/Drive APIs) — see
 [Google's MCP setup docs](https://developers.google.com/workspace/guides/configure-mcp-servers).
-Add or remove servers by editing the `MCP_SERVERS` list in `install.sh`.
+Add or remove servers by editing the `MCP_SERVERS` list in `mcp-setup.sh`.
 
 ## Manual install
 
