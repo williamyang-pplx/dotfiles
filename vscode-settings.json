@@ -1,4 +1,5 @@
 {
   "security.workspace.trust.enabled": false,
-  "editor.lineNumbers": "relative"
+  "editor.lineNumbers": "relative",
+  "workbench.panel.defaultLocation": "right"
 }
