@@ -1,0 +1,20 @@
+{
+  "name": "dotfiles",
+  "interface": {
+    "displayName": "William's Dotfiles"
+  },
+  "plugins": [
+    {
+      "name": "dotfiles-mcp",
+      "source": {
+        "source": "local",
+        "path": "./.agents/plugins/dotfiles-mcp"
+      },
+      "policy": {
+        "installation": "AVAILABLE",
+        "authentication": "ON_INSTALL"
+      },
+      "category": "Productivity"
+    }
+  ]
+}

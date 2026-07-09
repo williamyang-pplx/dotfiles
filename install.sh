@@ -101,9 +101,9 @@ if (( ${#missing[@]} )); then
   echo "Installed apt packages: ${missing[*]}"
 fi
 
-# MCP server registration is intentionally NOT done here. devbox replays
+# MCP plugin installation is intentionally NOT done here. devbox replays
 # dotfiles during provisioning, *before* claude/codex are installed, so any
-# `claude mcp add` at this point is a silent no-op (command -v fails). It's
+# agent setup command at this point is a silent no-op (command -v fails). It's
 # handled instead by mcp-setup.sh, invoked from ~/.bashrc on interactive shell
 # startup once the agent CLIs actually exist. See mcp-setup.sh for details.
 

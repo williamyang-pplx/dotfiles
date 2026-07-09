@@ -1,0 +1,15 @@
+{
+  "name": "dotfiles",
+  "owner": {
+    "name": "William Yang"
+  },
+  "metadata": {
+    "description": "Personal dotfiles plugins for coding agents."
+  },
+  "plugins": [
+    {
+      "name": "dotfiles-mcp",
+      "source": "./.agents/plugins/dotfiles-mcp"
+    }
+  ]
+}

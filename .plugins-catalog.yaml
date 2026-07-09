@@ -1,0 +1,17 @@
+marketplace:
+  name: dotfiles
+  claude:
+    owner: William Yang
+    description: Personal dotfiles plugins for coding agents.
+  codex:
+    display_name: William's Dotfiles
+
+defaults:
+  codex:
+    category: Productivity
+    policy:
+      installation: AVAILABLE
+      authentication: ON_INSTALL
+
+plugins:
+  - dir: dotfiles-mcp

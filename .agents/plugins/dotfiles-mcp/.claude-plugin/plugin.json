@@ -1,0 +1,6 @@
+{
+  "name": "dotfiles-mcp",
+  "description": "Personal remote MCP servers for Claude Code and Codex.",
+  "version": "1.0.0",
+  "mcpServers": "./.mcp.json"
+}

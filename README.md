@@ -37,28 +37,55 @@ keybinding file only takes effect in **code-server** (VSCode Web); for Remote-SS
 
 ## MCP servers (Claude Code + Codex)
 
-`mcp-setup.sh` registers remote MCP servers for Notion, Linear, and Google Workspace
-(Gmail/Calendar/Drive) in `claude` and `codex`, whichever is present.
+MCP servers are defined once in the `dotfiles-mcp` plugin:
+
+```text
+.agents/plugins/dotfiles-mcp/.mcp.json
+```
+
+The checked-in plugin manifests make the same server list available to both Claude Code
+and Codex:
+
+```text
+.claude-plugin/marketplace.json
+.agents/plugins/marketplace.json
+.agents/plugins/dotfiles-mcp/.claude-plugin/plugin.json
+.agents/plugins/dotfiles-mcp/.codex-plugin/plugin.json
+```
+
+`mcp-setup.sh` installs or updates that plugin in `claude` and `codex`, whichever is
+present. It does not maintain separate client-specific MCP server definitions.
 
 **Why not in `install.sh`?** devbox replays dotfiles during provisioning, *before*
-`claude`/`codex` are installed, so a `claude mcp add` there is a silent no-op (and the
-box still comes up `running`, hiding the miss). Instead, `.bashrc` runs `mcp-setup.sh`
-on interactive shell startup once the CLIs exist. It's idempotent and one-shot: it
-writes `~/.cache/dotfiles/mcp-registered` after a clean pass and is skipped thereafter.
-To re-register after installing a new agent CLI, run `~/.dotfiles/mcp-setup.sh` or
-`rm ~/.cache/dotfiles/mcp-registered`.
+`claude`/`codex` are installed, so an agent setup command there is a silent no-op (and
+the box still comes up `running`, hiding the miss). Instead, `.bashrc` runs
+`mcp-setup.sh --no-login` on interactive shell startup once the CLIs exist. The script is
+content-hash idempotent: it writes `~/.cache/dotfiles/mcp-plugin-stamp` after a clean
+pass and automatically reruns when the checked-in plugin files change.
 
-Registration is idempotent; the one-time OAuth login is interactive and must be done
-manually afterward:
+To force a reinstall/update:
 
-- **Claude Code**: `claude` → `/mcp` → authenticate each server.
-- **Codex**: `codex mcp login <name>` for each server.
+```bash
+~/dotfiles/mcp-setup.sh --force
+```
+
+OAuth login is interactive and intentionally separate from shell startup:
+
+```bash
+~/dotfiles/mcp-setup.sh --login
+```
+
+That runs `claude mcp login <name>` and `codex mcp login <name>` for each configured
+server: Notion, Linear, Gmail, Google Calendar, and Google Drive. Restart Claude Code or
+Codex after installing/updating the plugin if either agent was already running.
 
 Notion and Linear use a plain browser OAuth flow that works out of the box. The Google
-Workspace servers additionally require **your own** Google Cloud OAuth client ID/secret
-(create a Web-application OAuth client, enable the Gmail/Calendar/Drive APIs) — see
+Workspace servers may require a Google Cloud OAuth client with the Gmail, Calendar, and
+Drive APIs enabled — see
 [Google's MCP setup docs](https://developers.google.com/workspace/guides/configure-mcp-servers).
-Add or remove servers by editing the `MCP_SERVERS` list in `mcp-setup.sh`.
+Add or remove servers by editing `.agents/plugins/dotfiles-mcp/.mcp.json`; bump
+`.agents/plugins/dotfiles-mcp/plugin.yaml` if agent plugin caches need to see a new
+version.
 
 ## Manual install
 
