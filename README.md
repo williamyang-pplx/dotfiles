@@ -35,6 +35,28 @@ dirs. Note: for **Remote-SSH**, VSCode resolves keybindings on the *local* clien
 keybinding file only takes effect in **code-server** (VSCode Web); for Remote-SSH, copy
 `vscode-keybindings.json` into your local `keybindings.json`.
 
+## Agent skills (Claude Code + Codex)
+
+`skills/` holds agent skills — one directory per skill, each with a `SKILL.md`
+([agent skills format](https://developers.openai.com/codex/skills), shared by both CLIs).
+`install.sh` symlinks each skill into `~/.claude/skills/` (Claude Code) and
+`~/.codex/skills/` (Codex), where the CLIs auto-discover them; since discovery is just
+files on disk, this works at provisioning time even though the CLIs aren't installed yet
+(unlike MCP registration, below). Skills are linked individually rather than as a whole
+directory, so skills created directly on a devbox coexist with repo-managed ones.
+
+Current skills:
+
+- **format-code** — restyles code to my personal preferences (the editable
+  "Style preferences" section in its `SKILL.md`); defers to project formatter configs.
+- **error-review** — correctness-only review of the working diff (or named files);
+  reports verified findings with `file:line`, severity, and a suggested fix.
+
+Invoke explicitly (`/format-code` in Claude Code, `$format-code` in Codex) or let the
+agent pick them up implicitly from the task. To add a skill, create
+`skills/<name>/SKILL.md` (frontmatter `name` must match the directory) and rerun
+`install.sh`.
+
 ## MCP servers (Claude Code + Codex)
 
 `mcp-setup.sh` registers remote MCP servers for Notion, Linear, and Google Workspace

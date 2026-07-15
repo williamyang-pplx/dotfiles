@@ -87,6 +87,33 @@ for cli in code code-server; do
   fi
 done
 
+# Agent skills (Claude Code + Codex). Each skill is a directory under skills/
+# with a SKILL.md; both CLIs discover skills by scanning these dirs on disk
+# (Claude Code: ~/.claude/skills, Codex: ~/.codex/skills), so unlike MCP
+# registration this is safe to do at provisioning time before the CLIs exist.
+# Skills are linked one-by-one (not the whole dir) so skills created directly
+# on a devbox can coexist without landing in the repo.
+SKILL_DEST_ROOTS=("$HOME/.claude/skills" "$HOME/.codex/skills")
+
+for dest_root in "${SKILL_DEST_ROOTS[@]}"; do
+  mkdir -p "$dest_root"
+  for src in "$DOTFILES_DIR"/skills/*/; do
+    src="${src%/}"
+    [[ -d "$src" ]] || continue
+    dest="$dest_root/$(basename "$src")"
+
+    if [[ -L "$dest" ]]; then
+      rm "$dest"
+    elif [[ -e "$dest" ]]; then
+      mv "$dest" "$dest.bak"
+      echo "Backed up existing $dest to $dest.bak"
+    fi
+
+    ln -s "$src" "$dest"
+    echo "Linked $dest -> $src"
+  done
+done
+
 # System packages (devbox images are Debian-based; apt with passwordless sudo).
 APT_PACKAGES=(fzf)
 
