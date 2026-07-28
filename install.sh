@@ -87,17 +87,19 @@ for cli in code code-server; do
   fi
 done
 
-# Agent skills (Claude Code + Codex). Each skill is a directory under skills/
-# with a SKILL.md; both CLIs discover skills by scanning these dirs on disk
-# (Claude Code: ~/.claude/skills, Codex: ~/.codex/skills), so unlike MCP
-# registration this is safe to do at provisioning time before the CLIs exist.
+# Agent skills (Claude Code + Codex). Skills live under skills/<category>/<skill>/
+# with a SKILL.md; the categories (pr-review, pr-setup, style, helpers) are
+# for organizing the repo only. Both CLIs discover skills by scanning flat dirs on
+# disk (Claude Code: ~/.claude/skills, Codex: ~/.codex/skills), so each skill
+# dir is linked individually into the flat root — unlike MCP registration this
+# is safe to do at provisioning time before the CLIs exist.
 # Skills are linked one-by-one (not the whole dir) so skills created directly
 # on a devbox can coexist without landing in the repo.
 SKILL_DEST_ROOTS=("$HOME/.claude/skills" "$HOME/.codex/skills")
 
 for dest_root in "${SKILL_DEST_ROOTS[@]}"; do
   mkdir -p "$dest_root"
-  for src in "$DOTFILES_DIR"/skills/*/; do
+  for src in "$DOTFILES_DIR"/skills/*/*/; do
     src="${src%/}"
     [[ -d "$src" ]] || continue
     dest="$dest_root/$(basename "$src")"
@@ -114,18 +116,40 @@ for dest_root in "${SKILL_DEST_ROOTS[@]}"; do
   done
 done
 
-# System packages (devbox images are Debian-based; apt with passwordless sudo).
-APT_PACKAGES=(fzf)
+# Personal commands, symlinked onto PATH.
+BIN_FILES=(kitchen)
+mkdir -p "$HOME/.local/bin"
 
-missing=()
-for pkg in "${APT_PACKAGES[@]}"; do
-  dpkg -s "$pkg" &>/dev/null || missing+=("$pkg")
+for file in "${BIN_FILES[@]}"; do
+  src="$DOTFILES_DIR/bin/$file"
+  dest="$HOME/.local/bin/$file"
+
+  if [[ -L "$dest" ]]; then
+    rm "$dest"
+  elif [[ -e "$dest" ]]; then
+    mv "$dest" "$dest.bak"
+    echo "Backed up existing $dest to $dest.bak"
+  fi
+
+  ln -s "$src" "$dest"
+  echo "Linked $dest -> $src"
 done
 
-if (( ${#missing[@]} )); then
-  sudo apt-get update -qq
-  sudo apt-get install -y "${missing[@]}"
-  echo "Installed apt packages: ${missing[*]}"
+# System packages (devbox images are Debian-based; apt with passwordless sudo).
+# Guarded on dpkg so the script also runs on macOS, which has no apt.
+APT_PACKAGES=(fzf)
+
+if command -v dpkg &>/dev/null; then
+  missing=()
+  for pkg in "${APT_PACKAGES[@]}"; do
+    dpkg -s "$pkg" &>/dev/null || missing+=("$pkg")
+  done
+
+  if (( ${#missing[@]} )); then
+    sudo apt-get update -qq
+    sudo apt-get install -y "${missing[@]}"
+    echo "Installed apt packages: ${missing[*]}"
+  fi
 fi
 
 # MCP server registration is intentionally NOT done here. devbox replays

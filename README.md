@@ -49,8 +49,6 @@ Current skills:
 
 - **format-code** — restyles code to my personal preferences (the editable
   "Style preferences" section in its `SKILL.md`); defers to project formatter configs.
-- **error-review** — correctness-only review of the working diff (or named files);
-  reports verified findings with `file:line`, severity, and a suggested fix.
 
 Invoke explicitly (`/format-code` in Claude Code, `$format-code` in Codex) or let the
 agent pick them up implicitly from the task. To add a skill, create

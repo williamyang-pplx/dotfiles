@@ -8,6 +8,11 @@ if [[ -n "$TERM" ]] && ! infocmp "$TERM" &>/dev/null; then
     export TERM=xterm-256color
 fi
 
+# Personal commands (dotfiles bin/, symlinked here by install.sh)
+if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
+  export PATH="$HOME/.local/bin:$PATH"
+fi
+
 # History
 HISTFILE=~/.bash_history
 HISTSIZE=10000
@@ -55,7 +60,9 @@ alias codex-cook='codex --dangerously-bypass-approvals-and-sandbox'
 # fzf: Ctrl-R history search, Ctrl-T file finder, Alt-C cd, tab completion
 if command -v fzf &>/dev/null; then
   if fzf --bash &>/dev/null; then
-    source <(fzf --bash)
+    # eval, not `source <(...)`: macOS bash 3.2 sources st_size bytes, so
+    # sourcing a pipe is a silent no-op and the bindings never load
+    eval "$(fzf --bash)"
   else
     for f in /usr/share/doc/fzf/examples/key-bindings.bash \
              /usr/share/doc/fzf/examples/completion.bash; do

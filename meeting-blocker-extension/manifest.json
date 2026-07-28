@@ -1,0 +1,19 @@
+{
+  "manifest_version": 3,
+  "name": "Meeting Screen Blocker",
+  "version": "1.0.0",
+  "description": "Takes over your entire screen 5 minutes before your next Google Calendar meeting so you never miss one.",
+  "permissions": ["identity", "alarms", "storage", "tabs", "scripting"],
+  "host_permissions": ["https://www.googleapis.com/*", "<all_urls>"],
+  "background": {
+    "service_worker": "background.js"
+  },
+  "oauth2": {
+    "client_id": "YOUR_OAUTH_CLIENT_ID.apps.googleusercontent.com",
+    "scopes": ["https://www.googleapis.com/auth/calendar.readonly"]
+  },
+  "action": {
+    "default_popup": "popup.html",
+    "default_title": "Meeting Screen Blocker"
+  }
+}

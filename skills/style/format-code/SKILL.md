@@ -8,6 +8,17 @@ description: Reformat code to William's personal style preferences (naming, stru
 Apply the style preferences below to the target code. This is a style-only
 pass: never change behavior, public APIs, or logic.
 
+## Sync with main before editing
+
+Before making any code changes, pull the latest main and rebase the PR branch
+onto it:
+
+1. `git fetch origin main` (or the repo's default branch).
+2. `git rebase origin/main` on the current PR branch.
+3. If the rebase hits conflicts, stop immediately — do not resolve, `--abort`,
+   or `--continue` yourself. Conflicts are handled manually by the user; tell
+   them what conflicted and wait.
+
 ## Scope
 
 1. If the request names files, format those.
@@ -27,7 +38,20 @@ pass: never change behavior, public APIs, or logic.
 
 ## Style preferences
 
-<!-- Personal preferences — edit this section to taste. -->
+### Comments
+- Never write comments unless the user actively instructs you to add a comment. Comments
+include doc strings for files, classes, and functions.
+
+### Test Writing
+- Always prefer to write limited tests that cover the most important cases, rather than exhuastive
+testing that covers every single edge case.
+- In single tests always try to exhuastively cover as many cases as possible so as not to have to write
+multiple tests for each individual case. 
+- Always avoid writing explanatory comments for tests. Instead prefer descriptive variable names
+and functions that explain what's being tested clearly. 
+
+### Imports
+- No lazy imports! Imports should always live at the top of their source file.
 
 ### All languages
 
@@ -35,9 +59,6 @@ pass: never change behavior, public APIs, or logic.
 - Prefer early returns / guard clauses over nested conditionals.
 - Descriptive names over abbreviations; no single-letter names outside tiny
   loop/lambda scopes.
-- Comments explain *why*, not *what*. Delete commented-out code and stale
-  TODOs; keep comment density consistent with the surrounding file.
-- One blank line between logical blocks; no runs of multiple blank lines.
 
 ### Python
 
@@ -65,3 +86,6 @@ pass: never change behavior, public APIs, or logic.
   `python -m py_compile`) on every touched file to confirm nothing broke.
 - Summarize what was restyled per file, and list any suspected bugs noticed
   along the way as follow-ups.
+- If the restyled code is pushed to a PR, automatically update the PR
+  description: invoke the /pr-description skill at the end so the description
+  reflects the updated diff.

@@ -1,0 +1,656 @@
+#!/usr/bin/env -S uv run --script
+# /// script
+# requires-python = ">=3.12"
+# dependencies = ["textual==8.2.8"]
+# ///
+"""kitchen — TUI dashboard for Claude Code / Codex agents in local tmux sessions.
+
+Keys: c new claude · x new codex · a/enter attach (new Terminal tab) · d kill
+      j/k down/up · g/G top/bottom · r refresh · q quit
+While running, a macOS notification banner fires when a session transitions to
+needs-attention or finished.
+Debug: `kitchen --scan` prints one row per agent session and exits.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+import shlex
+import shutil
+import subprocess
+import sys
+import time
+from collections import deque
+from collections.abc import Collection, Mapping, Sequence
+from dataclasses import dataclass
+from enum import Enum
+from pathlib import Path
+from typing import Final
+
+from rich.text import Text
+from textual import events, work
+from textual.app import App, ComposeResult
+from textual.binding import Binding
+from textual.containers import Vertical
+from textual.screen import ModalScreen
+from textual.widgets import DataTable, Footer, Input, Label, OptionList
+
+TMUX: Final = "/opt/homebrew/bin/tmux"
+SESSIONS_DIR: Final = Path.home() / ".claude" / "sessions"
+REPO_ROOT: Final = Path.home() / "Documents"
+LAUNCH_CWD: Final = Path.cwd()
+REFRESH_SECONDS: Final = 2.0
+TAIL_LINES: Final = 15
+
+# "cook" variants per .bashrc: fully autonomous, no approval prompts.
+AGENT_COMMANDS: Final[Mapping[str, Sequence[str]]] = {
+    "claude": ("claude", "--dangerously-skip-permissions"),
+    "codex": ("codex", "--dangerously-bypass-approvals-and-sandbox"),
+}
+AGENTS: Final = frozenset(AGENT_COMMANDS)
+NAME_RE: Final = re.compile(r"^[A-Za-z0-9 _-]+$")
+TITLE_GLYPH_RE: Final = re.compile(r"^[⠀-⣿✳✽✢*·\s]+")
+SPINNER_RE: Final = re.compile(r"^[⠀-⣿]")
+
+CLAUDE_ATTENTION: Final[tuple[re.Pattern[str], ...]] = (
+    re.compile(r"Do you want"),
+    re.compile(r"Would you like"),
+    re.compile(r"❯ \d+\."),
+    re.compile(r"(?i)waiting for your (input|approval|response)"),
+)
+CODEX_ATTENTION: Final[tuple[re.Pattern[str], ...]] = (
+    re.compile(r"(?i)allow (command|this)"),
+    re.compile(r"(?i)\bapprove\b"),
+    re.compile(r"\by/n\b"),
+    re.compile(r"❯ \d+\."),
+    re.compile(r"Yes \(y\)"),
+)
+CODEX_WORKING: Final[tuple[re.Pattern[str], ...]] = (
+    re.compile(r"(?i)esc to interrupt"),
+)
+
+
+class Status(Enum):
+    NEEDS_ATTENTION = "needs attention"
+    WORKING = "working"
+    IDLE = "idle"
+    FINISHED = "finished"
+
+
+STATUS_STYLE: Final[Mapping[Status, str]] = {
+    Status.NEEDS_ATTENTION: "bold red",
+    Status.WORKING: "green",
+    Status.IDLE: "dim",
+    Status.FINISHED: "yellow",
+}
+STATUS_ORDER: Final[Mapping[Status, int]] = {
+    status: order for order, status in enumerate(Status)
+}
+NOTIFY_STATUSES: Final = frozenset({Status.NEEDS_ATTENTION, Status.FINISHED})
+
+
+@dataclass(frozen=True)
+class Pane:
+    session: str
+    pid: int
+    path: str
+    created: int
+    target: str
+    title: str
+
+
+@dataclass(frozen=True)
+class RegistryEntry:
+    pid: int
+    cwd: str
+    status: str
+
+
+@dataclass(frozen=True)
+class AgentRow:
+    session: str
+    agent: str
+    status: Status
+    task: str
+    cwd: str
+    uptime: str
+
+
+def run(argv: Sequence[str]) -> str:
+    return subprocess.run(argv, check=True, capture_output=True, text=True).stdout
+
+
+def list_panes() -> list[Pane]:
+    fields = (
+        "#{session_name}",
+        "#{pane_pid}",
+        "#{pane_current_path}",
+        "#{session_created}",
+        "#{pane_id}",
+        "#{pane_title}",
+    )
+    try:
+        out = run([TMUX, "list-panes", "-a", "-F", "\t".join(fields)])
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        return []
+    panes: list[Pane] = []
+    for line in out.splitlines():
+        # Title comes last: it is the only field with arbitrary user text.
+        parts = line.split("\t", 5)
+        if len(parts) != 6:
+            continue
+        session, pid, path, created, target, title = parts
+        panes.append(Pane(session, int(pid), path, int(created), target, title))
+    return panes
+
+
+def ps_snapshot() -> tuple[dict[int, list[int]], dict[int, str]]:
+    children: dict[int, list[int]] = {}
+    names: dict[int, str] = {}
+    for line in run(["ps", "-ax", "-o", "pid=,ppid=,comm="]).splitlines():
+        parts = line.split(None, 2)
+        if len(parts) != 3:
+            continue
+        pid, ppid, comm = int(parts[0]), int(parts[1]), parts[2]
+        # comm is sometimes a full path and login shells are "-bash".
+        names[pid] = Path(comm).name.lstrip("-")
+        children.setdefault(ppid, []).append(pid)
+    return children, names
+
+
+def find_agent(
+    pane_pid: int,
+    children: Mapping[int, Sequence[int]],
+    names: Mapping[int, str],
+) -> tuple[int, str] | None:
+    # The agent is a descendant of the pane shell, not the pane command itself:
+    # non-interactive wrapper shells keep it in their own process group, so
+    # #{pane_current_command} reports the shell.
+    queue = deque(children.get(pane_pid, ()))
+    while queue:
+        pid = queue.popleft()
+        name = names.get(pid, "")
+        if name in AGENTS:
+            return pid, name
+        queue.extend(children.get(pid, ()))
+    return None
+
+
+def load_registry(alive: Collection[int]) -> dict[int, RegistryEntry]:
+    entries: dict[int, RegistryEntry] = {}
+    for path in sorted(SESSIONS_DIR.glob("*.json")):
+        try:
+            data = json.loads(path.read_text())
+            entry = RegistryEntry(
+                int(data["pid"]), str(data["cwd"]), str(data["status"])
+            )
+        except (OSError, ValueError, KeyError):
+            # Registry files are rewritten live by claude and linger after
+            # crashes; a torn read or stale file is expected, not an error.
+            continue
+        if entry.pid in alive:
+            entries[entry.pid] = entry
+    return entries
+
+
+def capture_tail(target: str) -> str:
+    try:
+        out = run([TMUX, "capture-pane", "-p", "-t", target])
+    except subprocess.CalledProcessError:
+        return ""
+    return "\n".join(out.splitlines()[-TAIL_LINES:])
+
+
+def derive_status(
+    agent: str, title: str, entry: RegistryEntry | None, tail: str
+) -> Status:
+    attention = CLAUDE_ATTENTION if agent == "claude" else CODEX_ATTENTION
+    if any(pattern.search(tail) for pattern in attention):
+        return Status.NEEDS_ATTENTION
+    if agent == "claude":
+        if entry is not None:
+            return Status.WORKING if entry.status == "busy" else Status.IDLE
+        return Status.WORKING if SPINNER_RE.match(title) else Status.IDLE
+    if any(pattern.search(tail) for pattern in CODEX_WORKING):
+        return Status.WORKING
+    return Status.IDLE
+
+
+def strip_glyphs(title: str) -> str:
+    return TITLE_GLYPH_RE.sub("", title).strip()
+
+
+def short_path(path: str) -> str:
+    home = str(Path.home())
+    return "~" + path.removeprefix(home) if path.startswith(home) else path
+
+
+def format_uptime(created: int) -> str:
+    minutes = max(0, int(time.time()) - created) // 60
+    if minutes >= 60:
+        return f"{minutes // 60}h{minutes % 60:02d}m"
+    return f"{minutes}m"
+
+
+def scan(seen: dict[str, str]) -> list[AgentRow]:
+    panes = list_panes()
+    if not panes:
+        seen.clear()
+        return []
+    children, names = ps_snapshot()
+    registry = load_registry(names.keys())
+
+    by_session: dict[str, list[Pane]] = {}
+    for pane in panes:
+        by_session.setdefault(pane.session, []).append(pane)
+
+    rows: list[AgentRow] = []
+    for session, session_panes in by_session.items():
+        hit = next(
+            (
+                (pane, found)
+                for pane in session_panes
+                if (found := find_agent(pane.pid, children, names)) is not None
+            ),
+            None,
+        )
+        if hit is not None:
+            pane, (agent_pid, agent) = hit
+            seen[session] = agent
+            entry = registry.get(agent_pid) if agent == "claude" else None
+            status = derive_status(agent, pane.title, entry, capture_tail(pane.target))
+            cwd = entry.cwd if entry is not None else pane.path
+            rows.append(
+                AgentRow(
+                    session=session,
+                    agent=agent,
+                    status=status,
+                    task=strip_glyphs(pane.title),
+                    cwd=short_path(cwd),
+                    uptime=format_uptime(pane.created),
+                )
+            )
+        elif session in seen:
+            pane = session_panes[0]
+            rows.append(
+                AgentRow(
+                    session=session,
+                    agent=seen[session],
+                    status=Status.FINISHED,
+                    task=strip_glyphs(pane.title),
+                    cwd=short_path(pane.path),
+                    uptime=format_uptime(pane.created),
+                )
+            )
+    for gone in seen.keys() - by_session.keys():
+        del seen[gone]
+    rows.sort(key=lambda row: (STATUS_ORDER[row.status], row.session))
+    return rows
+
+
+def has_session(name: str) -> bool:
+    result = subprocess.run(
+        [TMUX, "has-session", "-t", f"={name}"], capture_output=True
+    )
+    return result.returncode == 0
+
+
+def create_session(name: str, cwd: Path, agent: str) -> None:
+    argv = AGENT_COMMANDS[agent]
+    binary = shutil.which(argv[0]) or argv[0]
+    # The agent runs as the pane command with a shell exec'd after it: FINISHED
+    # detection needs the pane to fall back to a shell instead of the session
+    # evaporating, and send-keys into the login shell is racy (keys typed
+    # before the shell finishes initializing are dropped).
+    command = f'{shlex.join([binary, *argv[1:]])}; exec "${{SHELL:-/bin/zsh}}" -l'
+    run([TMUX, "new-session", "-d", "-s", name, "-c", str(cwd), command])
+
+
+def kill_session(name: str) -> None:
+    run([TMUX, "kill-session", "-t", f"={name}"])
+
+
+def applescript_str(value: str) -> str:
+    # json.dumps matches AppleScript's quote/backslash escaping, but its \uXXXX
+    # escapes for non-ASCII (task titles, glyphs) are not AppleScript syntax —
+    # keep those as raw UTF-8.
+    return json.dumps(value, ensure_ascii=False)
+
+
+def send_banner(title: str, message: str) -> None:
+    script = (
+        f"display notification {applescript_str(message)} "
+        f"with title {applescript_str(title)}"
+    )
+    run(["osascript", "-e", script])
+
+
+def open_terminal_tab(session: str) -> None:
+    # shlex-quote for the shell that `do script` runs the command in: session
+    # names may contain spaces.
+    attach = applescript_str(f"{TMUX} attach -t {shlex.quote(f'={session}')}")
+    title = applescript_str(session)
+    # Terminal.app has no "create tab" AppleScript command; a System Events
+    # Cmd+T keystroke is the standard workaround (needs Automation +
+    # Accessibility permissions in TCC).
+    script = f"""
+tell application "Terminal"
+    activate
+    if (count of windows) = 0 then
+        do script {attach}
+    else
+        tell application "System Events" to keystroke "t" using command down
+        delay 0.3
+        do script {attach} in selected tab of front window
+    end if
+    set custom title of selected tab of front window to {title}
+end tell"""
+    run(["osascript", "-e", script])
+
+
+class ConfirmScreen(ModalScreen[bool]):
+    BINDINGS = [
+        Binding("y", "confirm", "yes"),
+        Binding("n,escape", "cancel", "no"),
+    ]
+
+    def __init__(self, message: str) -> None:
+        super().__init__()
+        self._message = message
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="dialog"):
+            yield Label(self._message)
+            yield Label("y confirm / n cancel")
+
+    def action_confirm(self) -> None:
+        self.dismiss(True)
+
+    def action_cancel(self) -> None:
+        self.dismiss(False)
+
+
+class NewSessionScreen(ModalScreen[tuple[str, Path] | None]):
+    """Vim-mode create dialog.
+
+    Normal mode is the directory list: j/k move (k past the top jumps up to
+    the name field), enter picks the highlighted directory, i opens the path
+    input to type a custom path (typing filters the list), q closes the
+    dialog. Esc in any input returns to normal mode; enter in the name field
+    validates it and drops to normal mode; enter in the path input submits.
+    """
+
+    def __init__(self, agent: str) -> None:
+        super().__init__()
+        self._agent = agent
+        self._dirs: tuple[str, ...] = tuple(
+            sorted(
+                (
+                    str(p)
+                    for p in REPO_ROOT.iterdir()
+                    if p.is_dir() and not p.name.startswith(".")
+                ),
+                key=str.lower,
+            )
+        )
+
+    def compose(self) -> ComposeResult:
+        with Vertical(id="dialog"):
+            yield Label(f"new {self._agent} session")
+            yield Input(placeholder="session name", id="name")
+            yield Input(value=str(LAUNCH_CWD), id="dir")
+            yield OptionList(*self._dirs, id="dirs")
+            yield Label("j/k move (k past top: name) · enter pick · i type path · q quit")
+
+    def on_key(self, event: events.Key) -> None:
+        focused = self.focused
+        if isinstance(focused, OptionList):
+            match event.key:
+                case "j":
+                    event.stop()
+                    focused.action_cursor_down()
+                case "k":
+                    event.stop()
+                    if focused.highlighted in (None, 0):
+                        self.query_one("#name", Input).focus()
+                    else:
+                        focused.action_cursor_up()
+                case "i":
+                    event.stop()
+                    self.query_one("#dir", Input).focus()
+                case "q":
+                    event.stop()
+                    self.dismiss(None)
+                case "escape":
+                    event.stop()
+        elif event.key == "escape":
+            event.stop()
+            self._focus_list()
+
+    def _focus_list(self) -> None:
+        options = self.query_one(OptionList)
+        if options.highlighted is None and options.option_count:
+            options.highlighted = 0
+        options.focus()
+
+    def on_input_changed(self, event: Input.Changed) -> None:
+        # Filter only on real typing: programmatic sets (the prefilled launch
+        # cwd, enter-pick writing the choice back) must not narrow the list.
+        if event.input.id != "dir" or not event.input.has_focus:
+            return
+        needle = event.value.lower()
+        options = self.query_one(OptionList)
+        options.clear_options()
+        options.add_options([d for d in self._dirs if needle in d.lower()])
+
+    def on_option_list_option_selected(self, event: OptionList.OptionSelected) -> None:
+        self.query_one("#dir", Input).value = str(event.option.prompt)
+        self._submit()
+
+    def on_input_submitted(self, event: Input.Submitted) -> None:
+        if event.input.id == "name":
+            if self._name_error() is None:
+                self._focus_list()
+            return
+        self._submit()
+
+    def _name_error(self) -> str | None:
+        name = self.query_one("#name", Input).value.strip()
+        error: str | None = None
+        if not NAME_RE.match(name):
+            error = "name must be letters, digits, spaces, - or _"
+        elif has_session(name):
+            error = f"session {name!r} already exists"
+        if error is not None:
+            self.notify(error, severity="error")
+            self.query_one("#name", Input).focus()
+        return error
+
+    def _submit(self) -> None:
+        if self._name_error() is not None:
+            return
+        name = self.query_one("#name", Input).value.strip()
+        cwd = Path(self.query_one("#dir", Input).value.strip()).expanduser()
+        if not cwd.is_dir():
+            self.notify(f"{cwd} is not a directory", severity="error")
+            return
+        self.dismiss((name, cwd))
+
+
+class KitchenApp(App[None]):
+    TITLE = "kitchen"
+    CSS = """
+    ModalScreen { align: center middle; }
+    #dialog { width: 76; height: auto; padding: 1 2; border: round $accent; background: $surface; }
+    #dialog Input { margin-top: 1; }
+    #dirs { max-height: 10; margin-top: 1; }
+    DataTable { height: 1fr; }
+    """
+    BINDINGS = [
+        Binding("c", "new_agent('claude')", "new claude"),
+        Binding("x", "new_agent('codex')", "new codex"),
+        Binding("a", "attach", "attach"),
+        Binding("enter", "noop", "attach", show=False),
+        Binding("d", "kill", "kill"),
+        Binding("r", "rescan", "refresh"),
+        Binding("q", "quit", "quit"),
+        Binding("j", "move_cursor('down')", "down", show=False),
+        Binding("k", "move_cursor('up')", "up", show=False),
+        Binding("g", "move_cursor('top')", "top", show=False),
+        Binding("G", "move_cursor('bottom')", "bottom", show=False),
+    ]
+
+    def __init__(self) -> None:
+        super().__init__()
+        self._seen: dict[str, str] = {}
+        self._row_keys: set[str] = set()
+        self._last_status: dict[str, Status] = {}
+
+    def compose(self) -> ComposeResult:
+        yield DataTable(cursor_type="row")
+        yield Footer()
+
+    def on_mount(self) -> None:
+        table = self.query_one(DataTable)
+        table.add_columns("session", "agent", "status", "task", "cwd", "uptime")
+        self.set_interval(REFRESH_SECONDS, self.rescan)
+        self.rescan()
+
+    @work(thread=True, exclusive=True)
+    def rescan(self) -> None:
+        rows = scan(self._seen)
+        self._notify_transitions(rows)
+        self.call_from_thread(self._apply, rows)
+
+    def _notify_transitions(self, rows: list[AgentRow]) -> None:
+        # Only touched from the exclusive rescan worker, so no lock needed.
+        for row in rows:
+            if (
+                row.status in NOTIFY_STATUSES
+                and self._last_status.get(row.session) != row.status
+            ):
+                detail = f" — {row.task}" if row.task else ""
+                try:
+                    send_banner(
+                        f"kitchen · {row.session}",
+                        f"{row.agent} {row.status.value}{detail}",
+                    )
+                except subprocess.CalledProcessError as exc:
+                    self.call_from_thread(self._notify_error, exc)
+        self._last_status = {row.session: row.status for row in rows}
+
+    def _apply(self, rows: list[AgentRow]) -> None:
+        table = self.query_one(DataTable)
+        selected = self._cursor_session()
+        table.clear()
+        self._row_keys = {row.session for row in rows}
+        for row in rows:
+            table.add_row(
+                row.session,
+                row.agent,
+                Text(row.status.value, style=STATUS_STYLE[row.status]),
+                row.task,
+                row.cwd,
+                row.uptime,
+                key=row.session,
+            )
+        if selected is not None and selected in self._row_keys:
+            table.move_cursor(row=table.get_row_index(selected))
+
+    def _cursor_session(self) -> str | None:
+        table = self.query_one(DataTable)
+        if not table.row_count or not table.is_valid_coordinate(
+            table.cursor_coordinate
+        ):
+            return None
+        return table.coordinate_to_cell_key(table.cursor_coordinate).row_key.value
+
+    def _notify_error(self, exc: subprocess.CalledProcessError) -> None:
+        detail = (exc.stderr or "").strip() or str(exc)
+        self.notify(detail, severity="error")
+
+    def action_noop(self) -> None:
+        pass
+
+    def action_move_cursor(self, direction: str) -> None:
+        table = self.query_one(DataTable)
+        if not table.row_count:
+            return
+        match direction:
+            case "down":
+                table.action_cursor_down()
+            case "up":
+                table.action_cursor_up()
+            case "top":
+                table.move_cursor(row=0)
+            case "bottom":
+                table.move_cursor(row=table.row_count - 1)
+
+    def action_rescan(self) -> None:
+        self.rescan()
+
+    def action_new_agent(self, agent: str) -> None:
+        def done(result: tuple[str, Path] | None) -> None:
+            if result is not None:
+                self._spawn(agent, *result)
+
+        self.push_screen(NewSessionScreen(agent), done)
+
+    @work(thread=True)
+    def _spawn(self, agent: str, name: str, cwd: Path) -> None:
+        try:
+            create_session(name, cwd, agent)
+            open_terminal_tab(name)
+        except subprocess.CalledProcessError as exc:
+            self.call_from_thread(self._notify_error, exc)
+        self.call_from_thread(self.rescan)
+
+    def action_kill(self) -> None:
+        session = self._cursor_session()
+        if session is None:
+            return
+
+        def done(confirmed: bool | None) -> None:
+            if not confirmed:
+                return
+            try:
+                kill_session(session)
+            except subprocess.CalledProcessError as exc:
+                self._notify_error(exc)
+            self._seen.pop(session, None)
+            self.rescan()
+
+        self.push_screen(ConfirmScreen(f"kill tmux session {session!r}?"), done)
+
+    def action_attach(self) -> None:
+        session = self._cursor_session()
+        if session is not None:
+            self._attach(session)
+
+    def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
+        session = event.row_key.value
+        if session is not None:
+            self._attach(session)
+
+    @work(thread=True)
+    def _attach(self, session: str) -> None:
+        try:
+            open_terminal_tab(session)
+        except subprocess.CalledProcessError as exc:
+            self.call_from_thread(self._notify_error, exc)
+
+
+def main() -> None:
+    if "--scan" in sys.argv[1:]:
+        for row in scan({}):
+            print(
+                f"{row.session}\t{row.agent}\t{row.status.name}\t"
+                f"{row.task}\t{row.cwd}\t{row.uptime}"
+            )
+        return
+    KitchenApp().run()
+
+
+if __name__ == "__main__":
+    main()
