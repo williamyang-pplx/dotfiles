@@ -1,110 +1,117 @@
 ---
 name: push-stacked-pr
-description: Rebase a PR onto main and cascade that rebase up its stack — rebase every PR stacked above it onto the new commits, force-pushing each. Use when asked to push a stack up, rebase a stacked PR, or propagate main/changes up a PR stack. Stops and asks the user before continuing past any rebase whose conflicts need a real refactor rather than a mechanical resolution; never touches main and only force-pushes with lease.
+description: Rebase a PR onto main and cascade that rebase up its stack using GitHub's official `gh stack` extension — restack every branch above it onto the new commits and update each PR. Use when asked to push a stack up, rebase a stacked PR, or propagate main/changes up a PR stack. Stops and asks the user before continuing past any rebase whose conflicts need a real refactor rather than a mechanical resolution; never touches main and relies on gh stack's built-in push safety (`--force-with-lease --atomic`, no bare `--force`).
 ---
 
-# Push a rebase up a stack of PRs
+# Push a rebase up a stack of PRs (gh stack)
 
-Given a PR (or the branch this session is working on) at the bottom, rebase it
-onto `main` and then walk the stack upward, rebasing each PR that sits above it
-onto the rewritten commits below, force-pushing as you go. The one hard stop:
-if a rebase hits conflicts that need a genuine refactor to resolve — not a
-mechanical reconciliation — abort that rebase and ask the user before going
-further up.
+Given a PR (or the branch this session is working on), sync its stack: rebase
+the bottom branch onto `main`, cascade every branch above it onto the rewritten
+commits, push all branches, and update the PRs — all via GitHub's official
+`gh stack` extension. The one hard stop: if the rebase hits conflicts that need
+a genuine refactor to resolve — not a mechanical reconciliation — abort that
+step and ask the user before going further up.
 
-Everything here rewrites already-pushed history, so it force-pushes. Two rules
-hold throughout: never rewrite or push `main`, and every force-push is
-`--force-with-lease` (so a teammate's push to that branch aborts rather than
-gets clobbered).
+This rewrites already-pushed history, so it pushes only through `gh stack`'s
+own safety checks (`gh stack sync` pushes with `--force-with-lease --atomic`,
+refusing to clobber a remote tip that has diverged and pushing all-or-nothing).
+Never fall back to a plain `git push --force` on a stack branch. Never rewrite
+or push `main`; `gh stack sync` only fast-forwards the local trunk from the
+remote.
 
-## 0. Identify the bottom of the stack
+Requires `gh auth status` to be logged in and the `gh-stack` extension to be
+installed (`gh extension list` should show `github/gh-stack`). If either is
+missing, stop and ask the user to `gh auth login` /
+`gh extension install github/gh-stack` first.
+
+## 0. Identify the stack
 
 Take the starting PR from the user (number, URL, or branch); if none given, use
 the branch this session is working on and its PR
-(`gh pr view --json number,headRefName,baseRefName,url`). This branch is the
-bottom — the one that gets rebased onto `main` (or onto its actual base if the
-PR's `baseRefName` isn't `main`; go with what GitHub says the base is).
+(`gh pr view --json number,headRefName,baseRefName,url`). `gh stack` operates
+on whole stacks, so any PR in the chain identifies it; the interesting bottom
+is the branch whose PR is based on `main` (go with what GitHub says the bases
+are).
 
-`git fetch origin` first so every base and tip below is current.
+## 1. Make sure the stack is tracked locally
 
-## 1. Discover the stack above it
+`gh stack view --short` (or `--json`) shows the stack the current branch
+belongs to, if tracked. If it isn't tracked locally, `gh stack checkout
+<pr-number>` discovers the stack from GitHub, fetches its branches, and sets it
+up locally. If the PRs were opened without gh-stack and discovery doesn't find
+a stack, adopt the branches by hand: `gh stack init <bottom> ... <top>`
+(bottom to top; existing branches are adopted, the first is based on the
+trunk).
 
-Build the stack from both sources and reconcile them:
+Cross-check the tracked stack against GitHub's view of the chain
+(`gh pr list --state open --json number,headRefName,baseRefName,url --limit 100`,
+following `baseRefName → headRefName` edges from the bottom branch up) — this
+catches forks (two PRs based on the same branch; gh-stack tracks linear stacks,
+so handle each chain independently) and confirms the tracked order matches what
+GitHub thinks the PR bases are.
 
-- **GitHub.** `gh pr list --state open --json number,headRefName,baseRefName,url --limit 100`.
-  Treat it as edges `baseRefName → headRefName`. Starting from the bottom
-  branch, collect every PR whose base is the bottom, then every PR based on
-  *those*, and so on — the transitive descendants. The result is usually a
-  linear chain but can fork (two PRs based on the same branch); handle each
-  chain independently.
-- **Locally.** Cross-check with `git branch` and `git log`: a local branch is
-  stacked on the one below it when the lower branch's tip is an ancestor of it
-  but `main` is not. Use this to catch branches whose PR is a draft or missing,
-  and to confirm the GitHub chain matches what's actually on disk.
+Show the user the stack you found (each PR: number, branch, base, linked URL)
+before rewriting anything — if it forked or GitHub and the local stack
+disagreed, that's exactly what they need to see. Then proceed.
 
-Order each chain bottom → top. Show the user the stack you found (each PR:
-number, branch, base, linked URL) before rewriting anything — if it forked or
-GitHub and local disagree, that's exactly what they need to see. Then proceed.
+## 2. Sync (rebase + push in one)
 
-## 2. Rebase the bottom PR onto main
-
-Work on each branch **in the worktree that already has it checked out**
-(`git worktree list` to find it; `git -C <path> ...`). A stack is often spread
-across worktrees, and git won't let you check a branch out twice. If a branch
-isn't checked out anywhere, add a scratch worktree for it
+Work in the worktree that already has a stack branch checked out
+(`git worktree list` to find it). gh stack needs to check out each branch in
+the stack as it rebases, so **no branch in this stack can be checked out in a
+different worktree** — if one is, switch that worktree to a scratch branch
+first. If no stack branch is checked out anywhere, add a scratch worktree
 (`git worktree add ../<repo>-stack <branch>`) rather than moving the session's
 checkout.
 
-For the bottom branch: record its current tip first
-(`git rev-parse <branch>` — the ones above are still attached to this SHA),
-then `git rebase origin/main`. Resolve any conflicts per §4. On success,
-`git push --force-with-lease`.
+Then `gh stack sync` — this fetches, reconciles the local stack with the stack
+on GitHub (pulling down branches for any PRs added remotely), fast-forwards the
+local trunk, cascade-rebases every stack branch onto its updated parent, pushes
+all branches atomically with `--force-with-lease`, and syncs PR state. No
+manual `--onto` math needed; gh stack tracks each branch's parent itself.
 
-## 3. Cascade the rebase up
+If sync reports that the local and remote stacks have **diverged**, don't pick
+an option yourself — in a non-interactive terminal it aborts without pushing;
+report the divergence to the user and let them decide.
 
-For each branch going up the chain, its parent's history was just rewritten, so
-move it onto the new commits with `--onto`:
+## 3. Conflict handling and the hard stop
 
-```
-git rebase --onto <parent-new-tip> <parent-old-tip> <child-branch>
-```
-
-- `<parent-old-tip>` is the SHA you recorded **before** rebasing the parent —
-  the old boundary between parent and child. `<parent-new-tip>` is the parent's
-  tip **after** its rebase. This replays only the child's own commits, dropping
-  the parent's old ones cleanly.
-- Before rebasing this child, record *its* old tip too — its own children will
-  need it as their `<old-tip>`.
-- Resolve conflicts per §4, then `git push --force-with-lease`.
-- The PR's base on GitHub is a branch name, not a SHA, so it needs no change.
-  (If GitHub ever retargeted a PR's base to `main` after a lower PR merged,
-  that PR is no longer part of this stack — note it and stop treating it as a
-  child.)
-
-Repeat until the chain is exhausted (and across each chain if the stack forked).
-
-## 4. Conflict handling and the hard stop
-
+If sync detects a rebase conflict, it restores every branch to its original
+state and exits, advising `gh stack rebase`. Run `gh stack rebase` — it redoes
+the cascading rebase and pauses at the conflict, same as plain `git rebase`.
 Resolve conflicts that are **mechanical** — the same lines moved, an import
-reordered, a rename that maps cleanly, a hunk that clearly belongs on top of the
-new base. Reconcile, `git add`, `git rebase --continue`.
+reordered, a rename that maps cleanly, a hunk that clearly belongs on top of
+the new base. Reconcile, `git add`, then `gh stack rebase --continue`.
 
-Stop when a conflict needs a **real refactor** — logic that has to be
-rewritten to fit the new base, semantic conflicts, or so many tangled files
-that resolving is a judgment call rather than a merge. Then:
+Stop when a conflict needs a **real refactor** — logic that has to be rewritten
+to fit the new base, semantic conflicts, or so many tangled files that
+resolving is a judgment call rather than a merge. Then:
 
-1. `git rebase --abort` — leave that branch exactly as it was on the remote.
-2. Do **not** rebase anything above it; those branches depend on this one, so
-   they can't be cascaded until it's resolved.
-3. Report what's already been rebased and pushed (that work stands), which
-   branch blocked and why, and ask the user how to continue: resolve this one
-   together now, skip it and stop, or hand the rest of the stack back to them.
-   Wait for their call — don't guess past the blockage.
+1. `gh stack rebase --abort` — restores every branch in the stack exactly as it
+   was before this operation started.
+2. Report what the stack looked like going in, which branch blocked and why,
+   and ask the user how to continue: resolve this one together now, skip it
+   and stop, or hand the rest of the stack back to them. Wait for their call —
+   don't guess past the blockage.
+
+Because sync aborts cleanly on conflict and pushes atomically, it never leaves
+lower branches rebased-and-pushed while a higher one is blocked. After a
+successful `gh stack rebase`, run `gh stack sync` again to push the rebased
+branches and update PR state.
+
+## 4. Missing PRs
+
+`gh stack sync` never opens pull requests — it only updates existing ones. If
+a stack branch that should have a PR is missing one, that's what
+`gh stack submit` is for, but be careful: submit includes **every** branch
+without a PR by default, and some branches (e.g. stacked e2e test branches)
+must never get one. Only run submit if the user wants the missing PR opened,
+and confirm which branches it will include first.
 
 ## 5. Report
 
-Bottom → top, one line per PR: rebased + pushed (new tip SHA), skipped (already
-current / merged), or **blocked** (the conflict that stopped the cascade), plus
-any branches above a block that were left untouched. If the stack forked or
-local and GitHub disagreed, say so. Note that CI will rerun on every branch you
-force-pushed and hasn't been verified green.
+Bottom → top, one line per PR: rebased + pushed (new tip SHA), skipped
+(already current / merged), or **blocked** (the conflict that stopped the
+rebase). If the stack forked or GitHub and the local stack disagreed, say so.
+Note that CI will rerun on every branch that was pushed and hasn't been
+verified green.

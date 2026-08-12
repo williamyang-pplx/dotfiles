@@ -58,6 +58,13 @@ change end to end against the real target from step 0:
   it can see exactly what passed.
 
 Commit to the stacked branch and push it (`git push -u origin <e2e-branch>`).
+This plain push is deliberate: do **not** route this branch through the
+/push-stacked-pr skill or add it to a tracked gh stack — `gh stack submit`
+opens a PR for every stack branch that lacks one, and this branch must never
+get one. If the underlying PR branch itself needs rebasing or pushing, that's
+a separate /push-stacked-pr
+invocation from the PR branch, after which this e2e branch must be restacked
+onto the rewritten PR branch before its own plain push.
 
 ## 4. Run it for real
 

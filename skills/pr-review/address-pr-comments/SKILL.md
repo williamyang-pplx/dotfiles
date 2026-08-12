@@ -39,11 +39,15 @@ When authorship is ambiguous, treat the comment as another human.
    them what conflicted and wait.
 4. For each comment, do the underlying work first — fix the code, answer the
    question with evidence from the repo — before writing any reply.
-5. Bot and williamyang-pplx threads: post a concise reply (and resolve the
+5. Push any code changes by invoking the /push-stacked-pr skill with this PR
+   as the bottom of the stack — never a plain `git push`. It rebases the
+   branch onto main, restacks every branch stacked above it, and pushes the
+   whole stack with gh stack's safety checks.
+6. Bot and williamyang-pplx threads: post a concise reply (and resolve the
    thread if the fix is pushed).
-6. Other human threads: summarize the thread and your proposed response back
+7. Other human threads: summarize the thread and your proposed response back
    to William; let him reply.
-7. If any code changes were pushed, automatically update the PR description:
+8. If any code changes were pushed, automatically update the PR description:
    invoke the /pr-description skill at the end so the description reflects
    the updated diff.
 

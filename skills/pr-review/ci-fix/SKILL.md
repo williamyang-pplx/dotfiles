@@ -17,6 +17,8 @@ checkout shouldn't move, work in a worktree
 (`git worktree add ../<repo>-ci <pr-branch>`).
 
 Never rewrite history that's already pushed — fix forward with new commits.
+(The one exception is the stack rebase /push-stacked-pr performs at push
+time.)
 
 ## 1. Collect every failure
 
@@ -49,7 +51,11 @@ step runs) so fixes are verified, not guessed. Hard rules:
 ## 3. Push
 
 Commit the fixes — one commit per logical fix, message naming the check it
-addresses — and push to the PR branch.
+addresses. Then push by invoking the `push-stacked-pr` skill with this PR as
+the bottom of the stack — never a plain `git push`. It rebases the branch
+onto main, restacks every branch stacked above it, and pushes the whole
+stack with gh stack's safety checks, so upstack PRs don't diverge from the
+fixes.
 
 ## 4. Report
 
