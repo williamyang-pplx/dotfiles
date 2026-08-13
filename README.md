@@ -55,6 +55,17 @@ agent pick them up implicitly from the task. To add a skill, create
 `skills/<name>/SKILL.md` (frontmatter `name` must match the directory) and rerun
 `install.sh`.
 
+## Claude Code statusline
+
+`scripts/default_statusline.py` and `scripts/setup_statusline.py` are vendored
+from agi's `pplx-common` plugin (`.agents/plugins/pplx-common/scripts/`) so
+devboxes without an agi checkout — e.g. air-only boxes — still get a
+statusline showing git branch, model, context window usage, and session cost
+(scaled by Perplexity's Anthropic discount). `install.sh` runs
+`setup_statusline.py`, which only writes `~/.claude/settings.json` if the
+user hasn't already configured a custom (non-default) statusline. Keep both
+scripts in sync with the agi originals if they change there.
+
 ## MCP servers (Claude Code + Codex)
 
 `mcp-setup.sh` registers remote MCP servers for Notion, Linear, and Google Workspace

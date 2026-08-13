@@ -135,6 +135,15 @@ for file in "${BIN_FILES[@]}"; do
   echo "Linked $dest -> $src"
 done
 
+# Claude Code statusline (branch, model, context %, cost). Vendored from agi's
+# pplx-common plugin so air-only devboxes (no agi checkout) still get it. Safe
+# to run before claude is installed since it only writes ~/.claude/settings.json;
+# non-destructive of a statusline the user already customized (see script).
+if command -v python3 &>/dev/null; then
+  python3 "$DOTFILES_DIR/scripts/setup_statusline.py"
+  echo "Configured Claude Code statusline"
+fi
+
 # System packages (devbox images are Debian-based; apt with passwordless sudo).
 # Guarded on dpkg so the script also runs on macOS, which has no apt.
 APT_PACKAGES=(fzf)
