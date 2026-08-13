@@ -70,8 +70,11 @@ def format_changed_files(count: int) -> str:
 def main() -> None:
     data = json.load(sys.stdin)
 
-    context_percent = data.get("context_window", {}).get("used_percentage", 0)
-    list_cost = data.get("cost", {}).get("total_cost_usd", 0)
+    # `.get(key, default)` only falls back when the key is absent; some
+    # Claude Code versions send these as explicit `null` before the first
+    # turn computes real usage, which `or 0` also catches.
+    context_percent = data.get("context_window", {}).get("used_percentage") or 0
+    list_cost = data.get("cost", {}).get("total_cost_usd") or 0
     cost = list_cost * (1 - ANTHROPIC_TOKEN_DISCOUNT)
     model_name = data.get("model", {}).get("display_name", "Unknown")
     git_branch = get_git_branch()
