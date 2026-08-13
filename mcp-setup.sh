@@ -37,12 +37,20 @@ trap 'rmdir "$LOCK" 2>/dev/null' EXIT
 failures=0
 registered=0
 
+# `add` can trigger an interactive OAuth flow for servers that require it
+# (linear, gmail, gcalendar, gdrive): the CLI blocks waiting for a browser
+# callback that never arrives on a headless devbox. `timeout -k` bounds that
+# wait and force-kills the process (and its OAuth callback listener) if it's
+# still around after the grace period, so one stuck server can't hang every
+# future shell startup.
+ADD_TIMEOUT=10
+
 if command -v claude &>/dev/null; then
   for entry in "${MCP_SERVERS[@]}"; do
     name="${entry%%|*}"; url="${entry#*|}"
-    if claude mcp get "$name" &>/dev/null; then
+    if timeout "$ADD_TIMEOUT" claude mcp get "$name" &>/dev/null; then
       continue
-    elif claude mcp add --scope user --transport http "$name" "$url" &>/dev/null; then
+    elif timeout -k 5 "$ADD_TIMEOUT" claude mcp add --scope user --transport http "$name" "$url" &>/dev/null; then
       echo "claude: registered MCP '$name'"
       registered=$((registered + 1))
     else
@@ -55,9 +63,9 @@ fi
 if command -v codex &>/dev/null; then
   for entry in "${MCP_SERVERS[@]}"; do
     name="${entry%%|*}"; url="${entry#*|}"
-    if codex mcp get "$name" &>/dev/null; then
+    if timeout "$ADD_TIMEOUT" codex mcp get "$name" &>/dev/null; then
       continue
-    elif codex mcp add "$name" --url "$url" &>/dev/null; then
+    elif timeout -k 5 "$ADD_TIMEOUT" codex mcp add "$name" --url "$url" &>/dev/null; then
       echo "codex: registered MCP '$name'"
       registered=$((registered + 1))
     else
