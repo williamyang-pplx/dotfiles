@@ -86,6 +86,9 @@ and functions that explain what's being tested clearly.
   `python -m py_compile`) on every touched file to confirm nothing broke.
 - Summarize what was restyled per file, and list any suspected bugs noticed
   along the way as follow-ups.
-- If the restyled code is pushed to a PR, automatically update the PR
-  description: invoke the /pr-description skill at the end so the description
-  reflects the updated diff.
+- If the restyled code is being pushed to a PR, push by invoking the
+  /push-stacked-pr skill with that PR as the bottom of the stack — never a
+  plain `git push` — so the branch and everything stacked above it are
+  rebased and pushed together. Then automatically update the PR description:
+  invoke the /pr-description skill at the end so the description reflects
+  the updated diff.

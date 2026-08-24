@@ -134,7 +134,14 @@ Only after the user has approved the plan:
 5. Commit the work, push the branch, and open the PR **as a draft**
    (`gh pr create --draft`). Every PR starts in draft mode — the user decides
    when to mark it ready for review. Use the `pr-description` skill for the
-   description.
+   description. The first push of this fresh branch is a plain
+   `git push -u origin <branch>` — /push-stacked-pr isn't needed (nothing is
+   stacked above a new branch) and its submit step would open the PR itself,
+   bypassing the draft rule. But rebase onto latest `origin/main` before that
+   first push if main has moved since branching, and any **later** push to
+   this PR (follow-up fixes, review feedback) goes through the
+   /push-stacked-pr skill so the branch and anything stacked on it by then
+   stay rebased and pushed together.
 6. Report what you changed against the ticket's acceptance criteria, note any
    criteria you could not meet and why, and state the worktree path, branch,
    and draft PR link.
