@@ -95,3 +95,4 @@ fi
 unset DOTFILES_ZSH_HANDOFF
 
 # Personal customizations below
+export AIR=~/Documents/air
