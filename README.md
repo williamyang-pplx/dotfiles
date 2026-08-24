@@ -49,6 +49,10 @@ Current skills:
 
 - **format-code** — restyles code to my personal preferences (the editable
   "Style preferences" section in its `SKILL.md`); defers to project formatter configs.
+- **simple-english** — vendored unmodified from
+  [AminBlg/SimpleEnglish](https://github.com/AminBlg/SimpleEnglish) (MIT), which rewrites
+  prose per ASD-STE100 Simplified Technical English. It replaced my hand-written
+  `human-voice` skill; re-vendor from upstream rather than editing it in place.
 
 Invoke explicitly (`/format-code` in Claude Code, `$format-code` in Codex) or let the
 agent pick them up implicitly from the task. To add a skill, create
