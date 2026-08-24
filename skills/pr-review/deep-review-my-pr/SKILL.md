@@ -1,6 +1,6 @@
 ---
 name: deep-review-my-pr
-description: Deep-review your own pull request before requesting human review — AI-generated slop, clear bugs, structural regressions, correctness, test sufficiency (including e2e for mission-critical changes), duplication of existing code, missed reuse opportunities, style/convention violations, and better abstractions. Fans out subagents to search the codebase and docs, then posts findings as inline comments on the PR. Use when asked to deep-review, self-review, or bot-review your own PR.
+description: Deep-review your own pull request before requesting human review — AI-generated slop, clear bugs, structural regressions, correctness, test sufficiency (including e2e for mission-critical changes), duplication of existing code, missed reuse opportunities, style/convention violations, and better abstractions. Fans out subagents to search the codebase and docs, then reports findings with file:line in the chat. Never writes to GitHub. Use when asked to deep-review, self-review, or bot-review your own PR.
 ---
 
 # Deep-review your own pull request
@@ -9,15 +9,14 @@ Review your own PR before you ask a human to, across every axis: AI slop a
 careful author wouldn't have written, clear bugs, structural regressions,
 correctness, sufficient testing, duplication, missed reuse, style/convention,
 and better abstractions. This is your work about to go in front of a
-reviewer — catch what they'd catch first. Post the surviving findings as
-inline comments on the PR so they're addressable in place.
+reviewer — catch what they'd catch first. Report the surviving findings to
+the user in the chat; never write anything to GitHub.
 
 ## Gather context
 
 1. Identify the PR (argument, current branch via `gh pr view`, or ask). Record
    `owner`, `repo`, PR `number`, and the head commit SHA
-   (`gh pr view --json number,headRefName,headRefOid,url`) — the SHA is needed
-   to anchor inline comments.
+   (`gh pr view --json number,headRefName,headRefOid,url`).
 2. Read the description and commits — judge the diff against stated intent, and
    note what the description claims about testing.
 3. Fetch the diff (`gh pr diff`); never comment on untouched lines.
@@ -62,7 +61,11 @@ written this? Matching existing patterns is not slop.
 
 - **Unnecessary comments**: restating the next line, narrating the change,
   section headers (`# Parse the input`), docstrings paraphrasing the
-  signature. A comment must explain a non-obvious "why".
+  signature. 
+  ***Exceptions***
+  - Short one or two sentence docstrings for complicated functions or
+  classes are FINE. 
+  - Paragraph long docstrings that summarize or explain how a file works are FINE. 
 - **AI boilerplate**: emoji, hedged naming (`enhanced_`, `_v2`), defensive
   try/except or null checks around code that can't fail, re-validating
   already-typed values.
@@ -187,6 +190,32 @@ alternative in hand.
 Prefer remedies that delete complexity over rearranging it. "Maybe rename this"
 is not a structural finding.
 
+## Axis 8: File and project layout
+
+Judge how the change carves code into files, and where reusable logic and
+config land. Prefer this shape:
+
+- **Small, modular files with descriptive names.** A file should be about one
+  thing, and its name should say what. Flag a new or grown file that mixes a
+  grab-bag of unrelated helpers in with the module's core functions — split
+  the helpers out into their own well-named file rather than stapling them onto
+  the core one.
+- **Reusable logic lives in a utils file or folder.** When a function is used
+  significantly across a module (not just once), it belongs in that module's
+  `utils` file or folder, not inlined next to one caller. A single `utils.py`
+  is fine until it sprawls; past that, prefer a `utils/` folder split by
+  concern.
+- **Centralized config.** Config values and env-var reads belong in one central
+  config file per project/module where they can be tuned later — not scattered
+  as literals and `os.environ[...]`/`process.env...` reads across random files.
+  Flag new tunables or env lookups added outside the config file, and point at
+  the config file they should move to.
+
+Only flag with the concrete destination in hand (the file to split into, the
+utils location, the config file). Match an existing project layout over
+imposing this one — if the repo already has a settled convention, judge against
+that and note the divergence.
+
 ## Helper placement: check the roadmap
 
 Helper verdicts depend on what code will exist soon, not just today. When a PR
@@ -223,44 +252,25 @@ Always drop:
   restructuring attached.
 - Issues explicitly silenced (e.g. lint-ignore).
 
-## Report: post inline comments to the PR
+## Report: findings in the chat only
 
-Post the surviving findings as inline review comments on the PR so each lands
-on the exact line it's about. This is your own PR, so posting AI-authored
-review comments on it is fine.
+Report the surviving findings to the user in the chat. **Never write to
+GitHub**: no review comments, no inline comments, no PR comments, no
+description edits, no pushes. If findings are later fixed, do not post
+updates or comments to the PR about the bugs being addressed either — the
+report in the chat is the only output.
 
-1. Create one pending review and attach every finding as an inline comment
-   anchored to the head SHA, then submit the review as `COMMENT` (not
-   `APPROVE`/`REQUEST_CHANGES`). Use the reviews API so all findings land as a
-   single review rather than a flurry of notifications:
-
-   ```
-   gh api repos/{owner}/{repo}/pulls/{number}/reviews \
-     -f commit_id="<head-sha>" \
-     -f event="COMMENT" \
-     -f body="<one-line verdict: clean / minor cleanup / needs work>" \
-     -F 'comments[][path]=<file>' \
-     -F 'comments[][line]=<line>' \
-     -F 'comments[][side]=RIGHT' \
-     -F 'comments[][body]=<finding body>'
-   ```
-
-   Repeat the four `comments[][...]` fields per finding. For a multi-line span
-   use `start_line`/`line`. If the reviews API is awkward for the batch, fall
-   back to one inline comment per finding via
-   `gh api repos/{owner}/{repo}/pulls/{number}/comments`.
-2. Each comment body follows:
+1. Each finding follows:
+   - **Location**: `file:line` (multi-line spans as `file:start-end`)
    - **Axis**: slop, bug (high/medium/low), testing, duplication, reuse, style,
-     or structure/design
+     structure/design, or layout
    - **Why**: bug → triggering scenario; testing → the uncovered behavior;
      duplication/reuse → the existing or destination code; slop → what a human
-     would have written; style/design → the convention or simpler shape
+     would have written; style/design → the convention or simpler shape;
+     layout → the file/utils/config destination it should move to
    - **Fix**: concrete and minimal
-3. Order the review body's summary bugs → testing → structure/design →
+2. Order findings bugs → testing → structure/design → layout →
    duplication/reuse → slop → style, by severity. Don't flood slop nits when
    structural issues exist.
-4. Write comment bodies in a human voice — specific, plain, no AI tells — since
-   they post under your account.
-5. After posting, tell the user the verdict, how many comments were posted, and
-   the review URL. If nothing survives, post no comments and say the PR looks
-   clean.
+3. Open with a one-line verdict (clean / minor cleanup / needs work), then the
+   findings. If nothing survives, say the PR looks clean.
