@@ -76,7 +76,7 @@ branch; surface it to the user.
 
 ## 5. Update the PR description
 
-Invoke the `pr-description` skill to add the result to the PR description's
+Invoke the `pr-authoring` skill to add the result to the PR description's
 testing section (**Testing Strategy** if the repo's template names it that,
 otherwise **Testing**) — it owns the formatting, voice, and the rules for
 updating an existing description without overwriting human edits. The
@@ -90,7 +90,7 @@ Name the concrete target (which account, device, environment) and the
 outcome. If the test was run against more than one target, one bullet each.
 This is an addition to the existing description — everything else in it stays
 untouched, and if a human has deleted the testing section, follow
-`pr-description`'s rules rather than re-creating it (surface the result in
+`pr-authoring`'s rules rather than re-creating it (surface the result in
 the final report instead).
 
 ## 6. Report

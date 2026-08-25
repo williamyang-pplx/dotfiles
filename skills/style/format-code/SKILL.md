@@ -90,5 +90,5 @@ and functions that explain what's being tested clearly.
   /push-stacked-pr skill with that PR as the bottom of the stack — never a
   plain `git push` — so the branch and everything stacked above it are
   rebased and pushed together. Then automatically update the PR description:
-  invoke the /pr-description skill at the end so the description reflects
+  invoke the /pr-authoring skill at the end so the description reflects
   the updated diff.

@@ -48,7 +48,7 @@ When authorship is ambiguous, treat the comment as another human.
 7. Other human threads: summarize the thread and your proposed response back
    to William; let him reply.
 8. If any code changes were pushed, automatically update the PR description:
-   invoke the /pr-description skill at the end so the description reflects
+   invoke the /pr-authoring skill at the end so the description reflects
    the updated diff.
 
 ## Reply voice
