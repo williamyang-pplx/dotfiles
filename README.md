@@ -6,9 +6,18 @@ shell is zsh, so `.zshrc` hands interactive sessions off to bash (see below). Gi
 preferences are applied via targeted `git config --global` calls instead (see below).
 Also installs the
 [VSCodeVim](https://marketplace.visualstudio.com/items?itemName=vscodevim.vim) extension
-for `code` (Remote-SSH) and `code-server` (VSCode Web), whichever is present, and the
+for `code` (Remote-SSH) and `code-server` (VSCode Web), whichever is present, the
 [`fzf`](https://github.com/junegunn/fzf) fuzzy finder via `apt` (with bash key bindings and
-completion wired into `.bashrc`).
+completion wired into `.bashrc`), and the [AWS CLI](#aws-cli) v2.
+
+## AWS CLI
+
+`install.sh` installs AWS CLI v2 from Amazon's official bundled installer rather than
+`apt`, which only ships the long-stale v1 `awscli` package. The installer unpacks a
+self-contained runtime into `/usr/local/aws-cli` and symlinks `aws` onto `PATH`. It's
+skipped if `aws` is already present, and Linux-only — the bundle has no macOS build, so
+use `brew install awscli` there. Failures are logged as warnings and don't abort the
+rest of the script (which would leave the devbox `degraded`).
 
 ## Shell: zsh → bash handoff
 

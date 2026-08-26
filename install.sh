@@ -146,7 +146,7 @@ fi
 
 # System packages (devbox images are Debian-based; apt with passwordless sudo).
 # Guarded on dpkg so the script also runs on macOS, which has no apt.
-APT_PACKAGES=(fzf)
+APT_PACKAGES=(fzf unzip)
 
 if command -v dpkg &>/dev/null; then
   missing=()
@@ -158,6 +158,37 @@ if command -v dpkg &>/dev/null; then
     sudo apt-get update -qq
     sudo apt-get install -y "${missing[@]}"
     echo "Installed apt packages: ${missing[*]}"
+  fi
+fi
+
+# AWS CLI v2. Not available from Debian apt (apt only ships the long-stale v1
+# `awscli`), so use Amazon's official bundled installer, which drops a
+# self-contained runtime in /usr/local/aws-cli and symlinks it onto PATH.
+# Linux-only: the installer has no macOS build (use `brew install awscli`
+# there). Non-fatal — a network failure during provisioning shouldn't abort the
+# rest of the script and mark the devbox degraded.
+if [[ "$(uname -s)" == "Linux" ]] && ! command -v aws &>/dev/null; then
+  case "$(uname -m)" in
+    x86_64) aws_arch=x86_64 ;;
+    aarch64 | arm64) aws_arch=aarch64 ;;
+    *) aws_arch="" ;;
+  esac
+
+  if [[ -z "$aws_arch" ]]; then
+    echo "warn: unsupported arch $(uname -m) for AWS CLI (skipping)" >&2
+  elif ! command -v unzip &>/dev/null; then
+    echo "warn: unzip missing, cannot install AWS CLI (skipping)" >&2
+  else
+    aws_tmp="$(mktemp -d)"
+    if curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-$aws_arch.zip" \
+         -o "$aws_tmp/awscliv2.zip" \
+       && unzip -q "$aws_tmp/awscliv2.zip" -d "$aws_tmp" \
+       && sudo "$aws_tmp/aws/install" --update; then
+      echo "Installed AWS CLI: $(aws --version 2>&1)"
+    else
+      echo "warn: failed to install AWS CLI (skipping)" >&2
+    fi
+    rm -rf "$aws_tmp"
   fi
 fi
 
