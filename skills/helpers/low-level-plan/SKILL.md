@@ -1,6 +1,6 @@
 ---
 name: low-level-plan
-description: Expand an existing high-level plan into a low-level implementation plan — outlines of every file, class, method, function signature, and config field to be added or changed — and present it in plan mode for the user to comment on. Use when asked for a low-level plan, a detailed/implementation-level design, or to flesh out, drill into, or make concrete a high-level plan that already exists (e.g. "/low-level-plan", "now give me the low-level version of this plan"). Read-only: it designs and presents, never implements.
+description: Expand an existing high-level plan into a low-level implementation plan — code-skeleton outlines of every file, class, method, function signature, and config field to be added or changed, written as they will actually appear in the files — and present it in plan mode for the user to comment on. Use when asked for a low-level plan, a detailed/implementation-level design, or to flesh out, drill into, or make concrete a high-level plan that already exists (e.g. "/low-level-plan", "now give me the low-level version of this plan"). Read-only: it designs and presents, never implements.
 ---
 
 # Low-level plan from a high-level plan
@@ -8,8 +8,8 @@ description: Expand an existing high-level plan into a low-level implementation 
 The input is a plan that already exists — usually one written earlier in this
 session. The output is the same plan at implementation altitude: every file
 touched, every function/class/method signature added or changed, every config
-field, laid out so the user can review the design **before** any code is
-written.
+field — laid out as code skeletons that read like the future files, so the
+user can review the design **before** any code is written.
 
 This skill never implements. It ends when the user has an approved low-level
 plan; the implementation is a separate, explicitly-requested step.
@@ -58,25 +58,37 @@ sub-agents if the user has not asked you to avoid them.
 
 ## 3. Write the low-level plan
 
-Cover the whole change, file by file, at signature level. Give every item a
-short stable ID (`F1`, `C2`, `K3`, …) so the user can comment by reference
-instead of quoting.
+Cover the whole change, file by file, as **code skeletons**: for each file, a
+code block in the target language showing the file's planned shape exactly as
+it will read once implemented — declarations in the order they will appear in
+the file, real syntax, real names, real types. Not bullet points describing
+code ideas; a reviewer should be able to squint at the skeleton and see the
+future file. Give every item a short stable ID (`F1`, `C2`, `K3`, …) — as a
+comment on the declaration — so the user can comment by reference instead of
+quoting.
 
 Include, wherever it applies:
 
 * **Files** — every path you will add, modify, or delete, each labelled
   `[new]` / `[modify]` / `[delete]`, in the order a reviewer should read them.
-* **Functions and methods** — full signatures: name, parameters with types,
-  return type, whether async/static/classmethod. For each, one line on what it
-  does and 2–5 bullets of intent (the steps, the error cases, what it calls).
-  Bullets, not code.
-* **Classes** — name, base classes, the fields with types, and the method list
-  (each method itself an item as above). Say what owns the instance and its
-  lifetime.
+  For each, one skeleton code block. In `[modify]` files, show only the parts
+  being added or changed, anchored by the real surrounding declarations
+  (`class Foo:` … `# unchanged` …) so their position in the file is clear.
+* **Functions and methods** — the full `def`/`func`/`fn` line as it will be
+  written: name, parameters with types, return type, decorators,
+  async/static/classmethod. A docstring (or doc comment) in the house style
+  saying what it does, and the body outlined as placeholder comments — one per
+  step, covering the calls made and the error cases — in the order the real
+  statements will go.
+* **Classes** — the real class statement with base classes, field declarations
+  with types, and each method skeletoned as above, in file order. Note (in the
+  docstring or a comment) what owns the instance and its lifetime.
 * **Data models / schemas** — dataclasses, pydantic models, protobufs, DB
-  columns, API request/response shapes, with field types and nullability.
-* **Configs** — every new or changed field: full key path, type, default,
-  units, valid range, which file it lives in, and where it is read.
+  columns, API request/response shapes — written out as the actual
+  declarations, with field types and nullability.
+* **Configs** — every new or changed field shown as the literal lines that
+  will land in the config file (full key path, default), plus a comment giving
+  type, units, valid range, and where it is read.
 * **Wiring** — how the new pieces are reached from existing entry points:
   the call path, registrations, dependency injection, feature flags, exports.
 * **Tests** — the test files and case names you will add or change, what each
@@ -96,18 +108,34 @@ Suggested shape:
 <2–3 lines: what gets built, at what altitude, against which high-level plan>
 
 ## path/to/file.py  [modify]
-- **F1** `def resolve_target(cfg: TargetConfig, *, strict: bool = False) -> Target`
-  Resolves a config entry to a live target.
-  - looks up `cfg.name` in the existing `TARGET_REGISTRY` (reused, not new)
-  - raises `UnknownTargetError` when missing and `strict`; returns `None` otherwise
-- **C2** `class TargetResolver(BaseResolver)`
-  Owns the cache; one instance per process, built in `main()`.
-  - fields: `_cache: dict[str, Target]`, `_clock: Clock`
-  - methods: `resolve(name: str) -> Target`, `invalidate(name: str) -> None`
+
+```python
+def resolve_target(cfg: TargetConfig, *, strict: bool = False) -> Target | None:  # F1
+    """Resolve a config entry to a live target."""
+    # look up cfg.name in the existing TARGET_REGISTRY (reused, not new)
+    # on miss: raise UnknownTargetError if strict, else return None
+
+
+class TargetResolver(BaseResolver):  # C2
+    """Owns the target cache; one instance per process, built in main()."""
+
+    _cache: dict[str, Target]
+    _clock: Clock
+
+    def resolve(self, name: str) -> Target:
+        # return cached entry if younger than resolver.cache_ttl_seconds (K3)
+        # otherwise call resolve_target(strict=True) and cache the result
+
+    def invalidate(self, name: str) -> None:
+        # drop name from _cache; no-op if absent
+```
 
 ## configs/service.yaml  [modify]
-- **K3** `resolver.cache_ttl_seconds: int = 300` — read by C2's `resolve`;
-  0 disables caching.
+
+```yaml
+resolver:
+  cache_ttl_seconds: 300  # K3 — int, seconds, 0 disables caching; read by C2.resolve
+```
 
 ## Tests
 - **T4** `tests/test_resolver.py` — cache hit, expiry via fake `Clock`,
@@ -124,11 +152,15 @@ Depth over breadth of prose: no restating the high-level plan's motivation, no
 "considerations" filler. Every line should be something the user can approve or
 strike.
 
-**Signatures, not implementations.** Real bodies belong in the implementation
-step — a plan full of finished code can't be reviewed at the design level and
-locks in choices the user hasn't agreed to yet. Keep each body to its intent
-bullets. Short illustrative snippets are fine only where a signature alone is
-genuinely ambiguous (a tricky type, a config literal's shape).
+**Skeletons, not implementations.** Everything outside the bodies — imports
+worth noting, signatures, class statements, field and config declarations —
+is written exactly as it will land in the file. The bodies themselves stay as
+placeholder comments outlining the steps: real statement-level logic belongs
+in the implementation step, since a plan full of finished code can't be
+reviewed at the design level and locks in choices the user hasn't agreed to
+yet. A real line inside a body is fine only where a comment would be more
+ambiguous than the code (a tricky type, a one-line delegation, a config
+literal's shape).
 
 ## 4. Present it and iterate
 
