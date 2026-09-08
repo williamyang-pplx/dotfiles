@@ -13,6 +13,11 @@ if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
   export PATH="$HOME/.local/bin:$PATH"
 fi
 
+# Hunk diff viewer (installed by install.sh into ~/.hunk/bin)
+if [[ ":$PATH:" != *":$HOME/.hunk/bin:"* ]]; then
+  export PATH="$HOME/.hunk/bin:$PATH"
+fi
+
 # History
 HISTFILE=~/.bash_history
 HISTSIZE=10000

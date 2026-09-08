@@ -45,3 +45,8 @@ fi
 
 # git-spice (Homebrew ships the binary as `git-spice` to avoid clashing with Ghostscript's `gs`)
 alias gs='git-spice'
+
+# Hunk diff viewer (installed by install.sh into ~/.hunk/bin)
+if [[ ":$PATH:" != *":$HOME/.hunk/bin:"* ]]; then
+  export PATH="$HOME/.hunk/bin:$PATH"
+fi

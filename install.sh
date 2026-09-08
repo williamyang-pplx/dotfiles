@@ -192,6 +192,20 @@ if [[ "$(uname -s)" == "Linux" ]] && ! command -v aws &>/dev/null; then
   fi
 fi
 
+# Hunk (terminal diff viewer, https://hunk.dev). The official installer works
+# on both macOS and Linux and drops the binary in ~/.hunk/bin, which .bashrc
+# and .zshrc already put on PATH — so pass HUNK_NO_MODIFY_PATH to keep the
+# installer from appending machine-specific PATH lines to the symlinked rc
+# files (it would dirty this repo on every devbox). Non-fatal: a network
+# failure during provisioning shouldn't abort the rest of the script.
+if ! command -v hunk &>/dev/null && [[ ! -x "$HOME/.hunk/bin/hunk" ]]; then
+  if curl -fsSL https://hunk.dev/install.sh | HUNK_NO_MODIFY_PATH=1 sh; then
+    echo "Installed hunk: $("$HOME/.hunk/bin/hunk" --version 2>&1)"
+  else
+    echo "warn: failed to install hunk (skipping)" >&2
+  fi
+fi
+
 # MCP server registration is intentionally NOT done here. devbox replays
 # dotfiles during provisioning, *before* claude/codex are installed, so any
 # `claude mcp add` at this point is a silent no-op (command -v fails). It's
