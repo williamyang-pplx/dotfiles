@@ -162,7 +162,42 @@ yet. A real line inside a body is fine only where a comment would be more
 ambiguous than the code (a tricky type, a one-line delegation, a config
 literal's shape).
 
-## 4. Present it and iterate
+## 4. ALWAYS review the draft with subagents before presenting
+
+Never present a first draft. Once the plan is written, dispatch two subagents
+— in parallel, in a single message, each given the full draft plan verbatim —
+and fold their findings back in before `ExitPlanMode`. Run these even when the
+user asked to avoid sub-agents for exploration; skip them only if the user
+explicitly says to skip review.
+
+1. **Adversarial correctness reviewer** (`Explore`, thorough). Prompt it to
+   attack the plan, not summarize it: assume the plan is wrong and find where.
+   It must verify against the actual code — every signature the plan extends,
+   every caller it claims exists, every config path, every wiring point — and
+   report, with `file:line` evidence: claims the code contradicts, missing
+   pieces (call sites not updated, error paths unhandled, tests that can't
+   catch the failure modes), interface mismatches between skeleton items, and
+   ordering/migration hazards. Findings only, no praise.
+
+2. **Simplify reviewer** (`Explore`, thorough). Prompt it to apply the
+   `/simplify` skill's lenses — reuse, simplification, efficiency, altitude —
+   to the plan: research the codebase for existing helpers, base classes,
+   utilities, or patterns that already do what the plan builds from scratch
+   (report each with `file:line`), and flag bloat to cut — new abstractions
+   with one caller, pass-through wrappers, config knobs nobody asked for,
+   files or classes that could collapse into existing ones, skeletons doing
+   more than the high-level plan requires. For every finding: what to delete
+   or replace, and what existing code takes its place.
+
+Then implement the fixes in the plan itself: rewrite the affected skeletons,
+swap new code for the reuse targets found, delete what the simplify pass
+condemned, and record anything user-visible (a dropped feature, a changed
+approach) in **Deviations**. A finding you reject needs a stated reason —
+either fixed into the plan or rebutted in **Open questions**, never silently
+dropped. If the fixes gut a major section, one re-review of the rewritten
+section is warranted; don't loop beyond that.
+
+## 5. Present it and iterate
 
 Present the plan with `ExitPlanMode` and stop. When the user comments, revise
 the affected items — keeping the IDs stable so the conversation stays anchored
