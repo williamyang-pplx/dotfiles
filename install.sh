@@ -144,6 +144,14 @@ if command -v python3 &>/dev/null; then
   echo "Configured Claude Code statusline"
 fi
 
+# Claude Code personal defaults (permissions.defaultMode=bypassPermissions so
+# sessions and their forks/subagents skip permission prompts). Merged key-by-key
+# into ~/.claude/settings.json; never overwrites a value already set (see script).
+if command -v python3 &>/dev/null; then
+  python3 "$DOTFILES_DIR/scripts/setup_claude_settings.py"
+  echo "Configured Claude Code settings defaults"
+fi
+
 # System packages (devbox images are Debian-based; apt with passwordless sudo).
 # Guarded on dpkg so the script also runs on macOS, which has no apt.
 APT_PACKAGES=(fzf unzip)
