@@ -8,15 +8,6 @@ if [[ -n "$TERM" ]] && ! infocmp "$TERM" &>/dev/null; then
     export TERM=xterm-256color
 fi
 
-# ble.sh (installed by install.sh): fish-style autosuggestions from history
-# and syntax highlighting — the bash counterpart of zsh-autosuggestions on
-# macOS. Per its manual it's sourced near the top with --attach=none and
-# activated by ble-attach at the very end of this file, so it sees the final
-# prompt/keybinding state. Right-arrow, End, or C-f accepts a suggestion.
-if [[ $- == *i* && -f "$HOME/.local/share/blesh/ble.sh" ]]; then
-  source "$HOME/.local/share/blesh/ble.sh" --attach=none
-fi
-
 # Personal commands (dotfiles bin/, symlinked here by install.sh)
 if [[ ":$PATH:" != *":$HOME/.local/bin:"* ]]; then
   export PATH="$HOME/.local/bin:$PATH"
@@ -71,13 +62,8 @@ alias gco='git checkout'
 alias claude-cook='claude --dangerously-skip-permissions'
 alias codex-cook='codex --dangerously-bypass-approvals-and-sandbox'
 
-# fzf: Ctrl-R history search, Ctrl-T file finder, Alt-C cd, tab completion.
-# Under ble.sh, fzf's stock bindings fight its line editor — use the
-# integration modules ble.sh ships instead (they locate fzf themselves).
-if [[ -n "${BLE_VERSION-}" ]]; then
-  ble-import -d integration/fzf-completion
-  ble-import -d integration/fzf-key-bindings
-elif command -v fzf &>/dev/null; then
+# fzf: Ctrl-R history search, Ctrl-T file finder, Alt-C cd, tab completion
+if command -v fzf &>/dev/null; then
   if fzf --bash &>/dev/null; then
     # eval, not `source <(...)`: macOS bash 3.2 sources st_size bytes, so
     # sourcing a pipe is a silent no-op and the bindings never load
@@ -116,7 +102,3 @@ unset DOTFILES_ZSH_HANDOFF
 # Personal customizations below
 export AIR=~/Documents/air
 . "$HOME/.cargo/env"
-
-# Activate ble.sh last so it captures the fully-configured shell (must stay
-# the final line of this file).
-[[ -z "${BLE_VERSION-}" ]] || ble-attach

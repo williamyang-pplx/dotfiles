@@ -8,10 +8,7 @@ Also installs the
 [VSCodeVim](https://marketplace.visualstudio.com/items?itemName=vscodevim.vim) extension
 for `code` (Remote-SSH) and `code-server` (VSCode Web), whichever is present, the
 [`fzf`](https://github.com/junegunn/fzf) fuzzy finder via `apt` (with bash key bindings and
-completion wired into `.bashrc`), [`ble.sh`](https://github.com/akinomyoga/ble.sh)
-(fish-style autosuggestions and syntax highlighting for bash — the devbox counterpart of
-the zsh-autosuggestions plugin used on macOS; right-arrow/End/C-f accepts a suggestion),
-and the [AWS CLI](#aws-cli) v2.
+completion wired into `.bashrc`), and the [AWS CLI](#aws-cli) v2.
 
 ## AWS CLI
 
