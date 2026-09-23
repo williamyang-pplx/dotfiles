@@ -73,21 +73,10 @@ alias codex-cook='codex --dangerously-bypass-approvals-and-sandbox'
 
 # fzf: Ctrl-R history search, Ctrl-T file finder, Alt-C cd, tab completion.
 # Under ble.sh, fzf's stock bindings fight its line editor — use the
-# integration modules ble.sh ships instead. Their fzf locator can't parse
-# version strings like "0.60 (devel)" and bails with "failed to find 'fzf'
-# base directory", so define fzf's functions here first (with its `bind` calls
-# muted, as the module itself does); the modules then skip the locator and
-# only rebind the already-loaded functions.
+# integration modules ble.sh ships instead (they locate fzf themselves).
 if [[ -n "${BLE_VERSION-}" ]]; then
-  if command -v fzf &>/dev/null; then
-    if fzf --bash &>/dev/null; then
-      ble/function#push bind :
-      eval "$(fzf --bash)"
-      ble/function#pop bind
-    fi
-    ble-import -d integration/fzf-completion
-    ble-import -d integration/fzf-key-bindings
-  fi
+  ble-import -d integration/fzf-completion
+  ble-import -d integration/fzf-key-bindings
 elif command -v fzf &>/dev/null; then
   if fzf --bash &>/dev/null; then
     # eval, not `source <(...)`: macOS bash 3.2 sources st_size bytes, so
