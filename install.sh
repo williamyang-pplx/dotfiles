@@ -154,7 +154,7 @@ fi
 
 # System packages (devbox images are Debian-based; apt with passwordless sudo).
 # Guarded on dpkg so the script also runs on macOS, which has no apt.
-APT_PACKAGES=(fzf unzip)
+APT_PACKAGES=(fzf unzip xz-utils)
 
 if command -v dpkg &>/dev/null; then
   missing=()
@@ -198,6 +198,27 @@ if [[ "$(uname -s)" == "Linux" ]] && ! command -v aws &>/dev/null; then
     fi
     rm -rf "$aws_tmp"
   fi
+fi
+
+# ble.sh (Bash Line Editor): fish-style autosuggestions from history plus
+# syntax highlighting for bash — the bash equivalent of the Homebrew
+# zsh-autosuggestions plugin used on macOS. Devbox interactive shells are bash
+# (see the zsh->bash handoff in .zshrc), so this is what makes autocomplete
+# work there; ~/.bashrc sources it. Linux-only: macOS stays in zsh. Uses the
+# prebuilt nightly tarball (no make/gawk needed; xz-utils installed above).
+# Non-fatal — a network failure during provisioning shouldn't abort the rest
+# of the script and mark the devbox degraded.
+if [[ "$(uname -s)" == "Linux" && ! -f "$HOME/.local/share/blesh/ble.sh" ]]; then
+  ble_tmp="$(mktemp -d)"
+  if curl -fsSL https://github.com/akinomyoga/ble.sh/releases/download/nightly/ble-nightly.tar.xz \
+       -o "$ble_tmp/ble-nightly.tar.xz" \
+     && tar xJf "$ble_tmp/ble-nightly.tar.xz" -C "$ble_tmp" \
+     && bash "$ble_tmp/ble-nightly/ble.sh" --install "$HOME/.local/share"; then
+    echo "Installed ble.sh to ~/.local/share/blesh"
+  else
+    echo "warn: failed to install ble.sh (skipping)" >&2
+  fi
+  rm -rf "$ble_tmp"
 fi
 
 # Hunk (terminal diff viewer, https://hunk.dev). The official installer works
