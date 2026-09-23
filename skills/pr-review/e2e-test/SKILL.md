@@ -1,100 +1,103 @@
 ---
 name: e2e-test
-description: Write and run a manual end-to-end test for a PR's change on a stacked branch (parent = the PR branch), exercising real hardware/services per the user's instructions, then record the result in the PR description's Testing Strategy. Never opens a PR for the e2e branch. Use when asked to e2e test, end-to-end test, or manually verify a change against real infrastructure.
+description: Write and run a manual end-to-end test for a PR's change on a stacked branch (parent = the PR branch), exercising real hardware/services per the user's instructions, plus an adversarial subagent pass, then record the result in the PR description's Testing Strategy. Never opens a PR for the e2e branch. Use when asked to e2e test, end-to-end test, or manually verify a change against real infrastructure.
 ---
 
 # End-to-end test a change
 
-Prove a PR's change works against the real thing — real hardware, a real
-external account, a live service — not just unit tests. The e2e test lives on
-a stacked branch so it never pollutes the PR's diff, and the evidence lands in
-the PR description.
+Prove that a PR's change works against the real system — real hardware, a
+real account, a live service. The e2e test lives on a stacked branch, so it
+does not change the PR's diff. The evidence goes in the PR description.
 
-Model: `[Aster] Add E2BProvider` (ppl-ai/air#7919), whose Testing Strategy
-points at a stacked branch `williamyang/ai-9590-e2b-e2e-manual` run against a
-real e2b.dev account.
+Model: `[Aster] Add E2BProvider` (ppl-ai/air#7919). Its Testing Strategy
+points at the stacked branch `williamyang/ai-9590-e2b-e2e-manual`, run
+against a real e2b.dev account.
 
 ## 0. Get the target from the user
 
-The user must say what real system the test should exercise (which hardware,
-account, endpoint, environment) and roughly what "working" looks like. If
-they invoked this skill without that context, ask before writing anything —
-do not invent a target.
+The user must name the real system to test (hardware, account, endpoint,
+environment) and what "working" looks like. If the user did not give this
+context, ask before you write anything. Do not invent a target.
 
 ## 1. Identify the PR branch
 
-Determine the PR branch from the current checkout (`git branch --show-current`)
-or `gh pr view --json headRefName,baseRefName,url`. Make sure the local branch
-is current with its remote before stacking on it.
+Get the PR branch from `git branch --show-current` or
+`gh pr view --json headRefName,baseRefName,url`. Make sure that the local
+branch is current with its remote.
 
 ## 2. Create the stacked e2e branch
 
-Create a new branch whose parent is the **PR branch** (not main):
+Create a branch whose parent is the **PR branch**, not main:
 
-- Name it by suffixing the PR branch's slug, e.g.
-  `williamyang/ai-9590-m2-t6-e2bprovider` → `williamyang/ai-9590-e2b-e2e-manual`
-  (keep the ticket key, describe the test, end in `-e2e-manual`).
-- `git checkout -b <e2e-branch> <pr-branch>` — or stack it in a dedicated
-  worktree (`git worktree add ../<repo>-e2e <pr-branch> -b <e2e-branch>`) if
-  the user's checkout shouldn't move.
+- Name it from the slug of the PR branch: keep the ticket key, describe the
+  test, and end in `-e2e-manual`. Example:
+  `williamyang/ai-9590-m2-t6-e2bprovider` → `williamyang/ai-9590-e2b-e2e-manual`.
+- Run `git checkout -b <e2e-branch> <pr-branch>`. If the user's checkout must
+  not move, use a worktree:
+  `git worktree add ../<repo>-e2e <pr-branch> -b <e2e-branch>`.
 
-**Never open a PR for this branch — not even a draft.** It exists only to be
-pushed and linked. Do not run `gh pr create` for it under any circumstances.
+**Never open a PR for this branch — not even a draft.** Do not run
+`gh pr create` for it.
 
 ## 3. Write the e2e test
 
-On the stacked branch, write a manual e2e script/test that drives the PR's
-change end to end against the real target from step 0:
+On the e2e branch, write a manual test that drives the PR's change against
+the real target:
 
-- Exercise the real code paths the PR added or changed — go through the
-  public entry points (factory, CLI, API), not internal shortcuts.
-- Hit the real system: real credentials from the environment, real devices,
-  real network — no mocks, no fakes. Read credentials/config from env vars;
-  never hardcode secrets.
-- Cover the change's main lifecycle plus the edge cases the PR description
-  claims to handle (e.g. create → execute → upload/download → teardown, error
-  paths, limits).
-- Make it self-reporting: clear pass/fail output per step so a human rerunning
-  it can see exactly what passed.
+- Use the real code paths through the public entry points (factory, CLI, API).
+- Use the real system: credentials from environment variables, real devices,
+  real network. No mocks. Do not hardcode secrets.
+- Cover the main lifecycle and the edge cases that the PR description claims
+  to handle.
+- Make each step show a clear pass or fail.
 
-Commit to the stacked branch and push it (`git push -u origin <e2e-branch>`).
-This plain push is deliberate: do **not** route this branch through the
-/push-stacked-pr skill or add it to a tracked gh stack — `gh stack submit`
-opens a PR for every stack branch that lacks one, and this branch must never
-get one. If the underlying PR branch itself needs rebasing or pushing, that's
-a separate /push-stacked-pr
-invocation from the PR branch, after which this e2e branch must be restacked
-onto the rewritten PR branch before its own plain push.
+Commit and push with `git push -u origin <e2e-branch>`. Do not use
+/push-stacked-pr or `gh stack` for this branch — `gh stack submit` opens a PR
+for each stack branch that lacks one. If the PR branch itself needs a rebase
+or push, do that with /push-stacked-pr from the PR branch. Then restack the
+e2e branch onto the rewritten PR branch, and push it plain again.
 
 ## 4. Run it for real
 
-Run the script against the real target and iterate until it passes cleanly.
-If it can't pass — missing credentials, hardware unavailable, or it exposes a
-real bug in the PR — stop and report exactly what happened rather than
-papering over it. A bug found here belongs in the PR branch, not the e2e
-branch; surface it to the user.
+Run the test against the real target. Correct it and run it again until it
+passes. If it cannot pass — missing credentials, hardware unavailable, or a
+real bug in the PR — stop and report what happened. A bug fix belongs in the
+PR branch, not the e2e branch. Report the bug to the user.
 
-## 5. Update the PR description
+## 5. Adversarial pass
 
-Invoke the `pr-authoring` skill to add the result to the PR description's
-testing section (**Testing Strategy** if the repo's template names it that,
-otherwise **Testing**) — it owns the formatting, voice, and the rules for
-updating an existing description without overwriting human edits. The
-content to hand it, one short bullet per run (per the model PR):
+Spawn a subagent to try to break the change. Give it only the PR description,
+the diff, and access to the e2e branch and the real target. Do not give it
+your test code or your assumptions. Instruct it to:
+
+- Read each claim in the PR description, and design inputs that try to
+  disprove it.
+- Probe error paths, limits, concurrency, and teardown — the paths that the
+  happy-path test skips.
+- Run its cases against the real target, and report each failure verbatim.
+
+Add the cases that found real gaps to the e2e test on the e2e branch. Report
+each bug to the user — the fix belongs in the PR branch.
+
+## 6. Update the PR description
+
+Invoke the `pr-authoring` skill to add the result to the description's
+testing section (**Testing Strategy** if the repo's template uses that name,
+otherwise **Testing**). That skill owns the format and the rules for edits to
+an existing description. Give it one short bullet per run:
 
 ```
 - Ran the manual e2e script (stacked branch [<e2e-branch>](https://github.com/<owner>/<repo>/compare/<pr-branch>...<e2e-branch>?expand=1)) against <the real target> — <result>
 ```
 
-Name the concrete target (which account, device, environment) and the
-outcome. If the test was run against more than one target, one bullet each.
-This is an addition to the existing description — everything else in it stays
-untouched, and if a human has deleted the testing section, follow
-`pr-authoring`'s rules rather than re-creating it (surface the result in
-the final report instead).
+Name the concrete target and the outcome. If the test ran against more than
+one target, write one bullet for each. Do not change the rest of the
+description. If a human deleted the testing section, follow the rules of
+`pr-authoring` and put the result in the final report instead.
 
-## 6. Report
+## 7. Report
 
-Tell the user: the e2e branch name and compare link, what the test covers,
-the run result (with failures verbatim if any), and that the PR description
-was updated. Remind them the e2e branch is pushed but has no PR, by design.
+Tell the user: the e2e branch name and compare link, what the test and the
+adversarial pass cover, the results (failures verbatim), and that the PR
+description was updated. Remind them that the e2e branch has no PR, by
+design.
