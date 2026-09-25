@@ -86,7 +86,8 @@ sure about.
    to William; let him reply.
 9. If any code changes were pushed, automatically update the PR description:
    invoke the /pr-authoring skill at the end so the description reflects
-   the updated diff.
+   the updated diff, then invoke the /shorten-pr-description skill on the
+   result as the final pass.
 
 ## Reply voice
 

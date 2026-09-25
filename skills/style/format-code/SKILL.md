@@ -91,4 +91,5 @@ and functions that explain what's being tested clearly.
   plain `git push` — so the branch and everything stacked above it are
   rebased and pushed together. Then automatically update the PR description:
   invoke the /pr-authoring skill at the end so the description reflects
-  the updated diff.
+  the updated diff, then invoke the /shorten-pr-description skill on the
+  result as the final pass.

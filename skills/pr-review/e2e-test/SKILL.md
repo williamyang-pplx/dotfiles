@@ -109,7 +109,9 @@ an existing description. Give it one short bullet per run:
 
 Name the concrete target and the outcome. If the test ran against more than
 one target, write one bullet for each. Do not change the rest of the
-description. If a human deleted the testing section, follow the rules of
+description. After the update, invoke the /shorten-pr-description skill as
+the final pass; its invoked-from-another-skill rules keep the testing
+section and the bullets you just added. If a human deleted the testing section, follow the rules of
 `pr-authoring` and put the result in the final report instead.
 
 ## 8. Report
