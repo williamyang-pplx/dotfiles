@@ -200,6 +200,45 @@ if [[ "$(uname -s)" == "Linux" ]] && ! command -v aws &>/dev/null; then
   fi
 fi
 
+# Agent + ML CLIs at their latest versions. The devbox image bakes claude and
+# codex into /usr/local/bin, but those lag releases by days. Install user-level
+# copies into ~/.local/bin instead, which is ahead of /usr/local/bin on PATH, so
+# no sudo is needed and the image copies stay untouched as a fallback. Every
+# step upgrades in place, so re-running install.sh brings a box back up to date.
+# Linux-only: on macOS these are managed by brew/the native installer already.
+# Non-fatal — a network failure during provisioning shouldn't abort the rest of
+# the script and mark the devbox degraded.
+if [[ "$(uname -s)" == "Linux" ]]; then
+  # Claude Code native installer (~/.local/bin/claude, self-updates afterwards).
+  if curl -fsSL https://claude.ai/install.sh | bash -s latest; then
+    echo "Installed Claude Code: $("$HOME/.local/bin/claude" --version 2>&1)"
+  else
+    echo "warn: failed to install Claude Code (skipping)" >&2
+  fi
+
+  # Codex via npm, prefixed into ~/.local so it doesn't need root.
+  if command -v npm &>/dev/null \
+     && npm install -g --prefix "$HOME/.local" @openai/codex@latest; then
+    echo "Installed Codex: $("$HOME/.local/bin/codex" --version 2>&1)"
+  else
+    echo "warn: failed to install Codex (skipping)" >&2
+  fi
+
+  # Modal and Weights & Biases CLIs as isolated uv tools (~/.local/bin).
+  UV_TOOLS=(modal wandb)
+  if command -v uv &>/dev/null; then
+    for tool in "${UV_TOOLS[@]}"; do
+      if uv tool install --upgrade "$tool"; then
+        echo "Installed $tool: $("$HOME/.local/bin/$tool" --version 2>&1)"
+      else
+        echo "warn: failed to install $tool (skipping)" >&2
+      fi
+    done
+  else
+    echo "warn: uv missing, cannot install ${UV_TOOLS[*]} (skipping)" >&2
+  fi
+fi
+
 # Hunk (terminal diff viewer, https://hunk.dev). The official installer works
 # on both macOS and Linux and drops the binary in ~/.hunk/bin, which .bashrc
 # and .zshrc already put on PATH — so pass HUNK_NO_MODIFY_PATH to keep the

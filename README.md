@@ -8,7 +8,17 @@ Also installs the
 [VSCodeVim](https://marketplace.visualstudio.com/items?itemName=vscodevim.vim) extension
 for `code` (Remote-SSH) and `code-server` (VSCode Web), whichever is present, the
 [`fzf`](https://github.com/junegunn/fzf) fuzzy finder via `apt` (with bash key bindings and
-completion wired into `.bashrc`), and the [AWS CLI](#aws-cli) v2.
+completion wired into `.bashrc`), the [AWS CLI](#aws-cli) v2, and the
+[latest agent and ML CLIs](#agent-and-ml-clis).
+
+## Agent and ML CLIs
+
+On Linux, `install.sh` installs the latest Claude Code (native installer), Codex
+(`npm --prefix ~/.local`), and the Modal and W&B CLIs (`uv tool install`), all into
+`~/.local/bin`. That directory comes before `/usr/local/bin` on `PATH`, so these copies
+shadow the older `claude`/`codex` baked into the devbox image, and no sudo is needed.
+Each step upgrades in place, so re-run `install.sh` to update a box. Failures are logged
+as warnings and don't abort the script.
 
 ## AWS CLI
 
