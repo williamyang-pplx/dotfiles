@@ -21,6 +21,11 @@ when the high-level plan looks small. Everything below is read-only: no files
 written, no branches or worktrees created. Present the finished low-level plan
 with `ExitPlanMode` and wait for the user.
 
+If the user names a plan file to write instead (e.g. a kitchen `.kitchen/plan.md`),
+write and revise the plan there and skip plan mode — plan mode blocks that write.
+Either way, the draft lives in a file from step 3 on — the named file, or in
+plan mode the plan file Claude Code provides — so later steps edit it in place.
+
 ## 1. Find the high-level plan
 
 In order of preference:
@@ -32,7 +37,8 @@ In order of preference:
 
 Read it in full and restate, in two or three lines, the goal and scope you are
 working from. Never invent a high-level plan to expand: if there isn't one, say
-so and offer to write one first.
+so and offer to write one first. Launch step 2's grounding agents in the same
+turn as the restatement — don't stop to read files first.
 
 ## 2. Ground the plan in the actual code
 
@@ -52,9 +58,21 @@ high-level plan makes about existing code:
    no longer holds). These go in the plan's "Deviations" section, not silently
    into the design.
 
-For a broad or unfamiliar area, dispatch `Explore` sub-agents — tightly scoped,
-in parallel when the work is independent — and keep the conclusions. Only spawn
-sub-agents if the user has not asked you to avoid them.
+Ground by fan-out, not serial reading. In ONE message, dispatch parallel
+`Explore` agents (medium thoroughness, `model: "sonnet"`), one per independent
+area the plan touches — a module, a file group, or a cross-cutting concern like
+config, wiring, or tests — capped at ~6. Give each the high-level plan verbatim
+plus its area, and have it return a compact brief, not file dumps:
+
+- the real signatures, types, and call sites the plan extends (`file:line`);
+- reuse targets — existing helpers, base classes, fixtures, config objects the
+  new code should hang off (`file:line`);
+- local conventions (naming, typing, errors, module layout);
+- every claim in the high-level plan the code contradicts.
+
+Read the one or two files central to the design yourself while they run. Skip
+the fan-out only when the plan touches 1–2 files you can read in one go, or the
+user asked you to avoid sub-agents.
 
 ## 3. Write the low-level plan
 
@@ -100,6 +118,22 @@ Include, wherever it applies:
   why, from step 2's findings.
 * **Open questions** — the decisions you want the user to make, each with your
   recommended answer so silence still leaves a workable plan.
+
+### Draft in parallel for large plans
+
+When the plan spans more than ~4 files:
+
+1. Write the **contract** into the plan file first: Summary, the file list with
+   [new]/[modify]/[delete] labels, every ID, and every signature or schema that
+   crosses a file boundary. This is the part only you can decide.
+2. In ONE message, dispatch a `general-purpose` drafter per file group (up to
+   ~6). Give each the contract, the grounding briefs for its area, and the
+   skeleton rules in this section; each returns the finished markdown section
+   for its files.
+3. Paste the returned sections into the plan file in reviewer order, fixing any
+   drift from the contract while stitching.
+
+Write smaller plans yourself in one pass.
 
 Suggested shape:
 
@@ -164,45 +198,50 @@ literal's shape).
 
 ## 4. ALWAYS review the draft with subagents before presenting
 
-Never present a first draft. Once the plan is written, dispatch two subagents
-— in parallel, in a single message, each given the full draft plan verbatim —
-and fold their findings back in before `ExitPlanMode`. Run these even when the
-user asked to avoid sub-agents for exploration; skip them only if the user
-explicitly says to skip review.
+Never present a first draft. Once the plan is written, review it with a
+single fan-out of narrow reviewers and fold their findings back in before
+presenting. Run these even when the user asked to avoid sub-agents for
+exploration; skip them only if the user explicitly says to skip review.
 
-1. **Adversarial correctness reviewer** (`Explore`, thorough). Prompt it to
-   attack the plan, not summarize it: assume the plan is wrong and find where.
-   It must verify against the actual code — every signature the plan extends,
-   every caller it claims exists, every config path, every wiring point — and
-   report, with `file:line` evidence: claims the code contradicts, missing
-   pieces (call sites not updated, error paths unhandled, tests that can't
-   catch the failure modes), interface mismatches between skeleton items, and
-   ordering/migration hazards. Findings only, no praise.
+In ONE message, dispatch every reviewer in parallel, each pointed at the plan
+file (not pasted — don't spend output tokens re-emitting it):
 
-2. **Simplify reviewer** (`Explore`, thorough). Prompt it to apply the
-   `/simplify` skill's lenses — reuse, simplification, efficiency, altitude —
-   to the plan: research the codebase for existing helpers, base classes,
-   utilities, or patterns that already do what the plan builds from scratch
-   (report each with `file:line`), and flag bloat to cut — new abstractions
-   with one caller, pass-through wrappers, config knobs nobody asked for,
-   files or classes that could collapse into existing ones, skeletons doing
-   more than the high-level plan requires. For every finding: what to delete
-   or replace, and what existing code takes its place.
+1. **Correctness reviewers** (`Explore`, medium) — one per file group (the
+   drafter or grounding split), up to ~4. Each attacks only its own sections:
+   assume the plan is wrong and find where, verifying against the actual code —
+   every signature the plan extends, every caller it claims exists, every config
+   path. Report claims the code contradicts, call sites not updated, error paths
+   unhandled, and tests that can't catch the failure modes.
+2. **Interface reviewer** (`Explore`, medium) — only the cross-file seams:
+   signature mismatches between skeleton items, wiring/registration gaps, and
+   ordering/migration hazards.
+3. **Simplify reviewer** (`Explore`, medium) — the `/simplify` lenses applied
+   to bloat: new abstractions with one caller, pass-through wrappers, config
+   knobs nobody asked for, files or classes that could collapse into existing
+   ones, skeletons doing more than the high-level plan requires. Reuse research
+   already happened in step 2 — give it those briefs instead of having it
+   re-sweep the repo.
 
-Then implement the fixes in the plan itself: rewrite the affected skeletons,
-swap new code for the reuse targets found, delete what the simplify pass
-condemned, and record anything user-visible (a dropped feature, a changed
-approach) in **Deviations**. A finding you reject needs a stated reason —
-either fixed into the plan or rebutted in **Open questions**, never silently
-dropped. If the fixes gut a major section, one re-review of the rewritten
-section is warranted; don't loop beyond that.
+Every reviewer returns findings ranked by severity, each with `file:line`
+evidence and the concrete replacement text for the affected plan item (by ID),
+so fold-in is mechanical. Findings only, no praise. For a 1–3 file plan, one
+correctness reviewer plus the simplify reviewer is enough.
+
+Fold the findings in with targeted edits to the affected IDs — never rewrite
+the whole plan. Swap new code for the reuse targets found, delete what the
+simplify pass condemned, and record anything user-visible (a dropped feature, a
+changed approach) in **Deviations**. A finding you reject needs a stated reason
+— either fixed into the plan or rebutted in **Open questions**, never silently
+dropped. If a fix guts a section, re-review that section alone with one
+reviewer; don't loop beyond that.
 
 ## 5. Present it and iterate
 
 Present the plan with `ExitPlanMode` and stop. When the user comments, revise
-the affected items — keeping the IDs stable so the conversation stays anchored
-— and present again. Do not start implementing on an unapproved plan, and do
-not treat "looks good" on one section as approval of the rest.
+the affected items in place — keeping the IDs stable so the conversation stays
+anchored, and re-reviewing only the sections whose design changed — and present
+again. Do not start implementing on an unapproved plan, and do not treat "looks
+good" on one section as approval of the rest.
 
 If the plan is worth keeping past this conversation, offer the `save-plan`
 skill once it's approved.
