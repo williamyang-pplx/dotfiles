@@ -12,6 +12,18 @@ and better abstractions. This is your work about to go in front of a
 reviewer — catch what they'd catch first. Report the surviving findings to
 the user in the chat; never write anything to GitHub.
 
+## In Claude Code: run the deep-review-pr workflow
+
+1. From the PR's repo, run
+   `<this skill's base directory>/prefetch.py <pr> mine <this skill's base directory>/SKILL.md`.
+   It prints the path of a generated `run.js`.
+2. Call `Workflow({scriptPath: "<that path>"})`.
+3. Format the returned `findings` per "Report" below (already in report order),
+   then list `unverified` findings and `failed` stages separately. A run with
+   either is never "clean".
+
+Without the Workflow tool (Codex), follow the steps below.
+
 ## Gather context
 
 1. Identify the PR (argument, current branch via `gh pr view`, or ask). Record

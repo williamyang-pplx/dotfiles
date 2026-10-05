@@ -75,8 +75,10 @@ Current skills:
 
 Invoke explicitly (`/format-code` in Claude Code, `$format-code` in Codex) or let the
 agent pick them up implicitly from the task. To add a skill, create
-`skills/<name>/SKILL.md` (frontmatter `name` must match the directory) and rerun
-`install.sh`.
+`skills/<category>/<name>/SKILL.md` (frontmatter `name` must match the directory) and
+rerun `install.sh`. A skill may ship a Claude Code Workflow script next to its
+`SKILL.md`; the skill calls it by `scriptPath` and falls back to its prose steps in
+Codex.
 
 ## Claude Code statusline
 

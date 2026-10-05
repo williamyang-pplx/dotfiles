@@ -11,6 +11,18 @@ assume competence, judge against the codebase's actual conventions, and
 only report findings a good human reviewer would bother to write. Never
 post to GitHub and never push to their branch unless explicitly asked.
 
+## In Claude Code: run the deep-review-pr workflow
+
+1. From the PR's repo, run
+   `<this skill's base directory>/../deep-review-my-pr/prefetch.py <pr> other <this skill's base directory>/SKILL.md`.
+   It prints the path of a generated `run.js`.
+2. Call `Workflow({scriptPath: "<that path>"})`.
+3. Format the returned `findings` per "Report" below (already in report order),
+   then list `unverified` findings and `failed` stages separately. A run with
+   either is never "approve"; if nothing survives, name what was checked.
+
+Without the Workflow tool (Codex), follow the steps below.
+
 ## Gather context
 
 1. Identify the PR (argument, current branch via `gh pr view`, or ask).
