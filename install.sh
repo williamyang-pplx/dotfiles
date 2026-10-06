@@ -30,6 +30,16 @@ git config --global core.editor vim
 git config --global pull.rebase false
 git config --global init.defaultBranch main
 
+# ~/.bazelrc is NOT symlinked either: devboxes keep machine-local lines there
+# (output_user_root, max_idle_secs). Append a try-import of ours instead, once.
+# Bazel doesn't expand ~ in rc files, so the path is written out in full.
+BAZELRC_IMPORT="try-import $DOTFILES_DIR/bazelrc"
+if ! grep -qxF "$BAZELRC_IMPORT" "$HOME/.bazelrc" 2>/dev/null; then
+  printf '\n# Added by dotfiles install.sh: shared Bazel settings (remote cache).\n%s\n' \
+    "$BAZELRC_IMPORT" >> "$HOME/.bazelrc"
+  echo "Added $BAZELRC_IMPORT to $HOME/.bazelrc"
+fi
+
 VSCODE_SETTINGS_TARGETS=(
   "$HOME/.vscode-server/data/Machine/settings.json"
   "$HOME/.local/share/code-server/User/settings.json"

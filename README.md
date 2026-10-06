@@ -29,6 +29,14 @@ skipped if `aws` is already present, and Linux-only — the bundle has no macOS 
 use `brew install awscli` there. Failures are logged as warnings and don't abort the
 rest of the script (which would leave the devbox `degraded`).
 
+## Bazel
+
+`bazelrc` turns on the shared remote cache (`bazelremote-dev-grpc.pplx.net`) for
+every Bazel repo and worktree on the machine; agi sets it in its own `.bazelrc`, air
+does not. `install.sh` doesn't symlink it over `~/.bazelrc`, which keeps machine-local
+lines. It appends `try-import <dotfiles>/bazelrc` once. The kitchen's host setup
+adds the same line on the mac and on each workspace devbox.
+
 ## Shell: zsh → bash handoff
 
 Devboxes default to **zsh** as the login shell, but this config targets bash. `.zshrc`

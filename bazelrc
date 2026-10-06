@@ -1,0 +1,11 @@
+# Bazel settings for every repo and worktree on this machine. Not symlinked:
+# install.sh (and the kitchen's host setup) add a `try-import` of this file to
+# ~/.bazelrc, so machine-local lines already there (output_user_root,
+# max_idle_secs, ...) stay. ~/.bazelrc is read after the workspace .bazelrc,
+# so these flags win over a repo's own.
+
+# Shared remote cache. agi turns it on in its .bazelrc, but air does not (only
+# its CI does), so worktrees there built everything from scratch. A repo's
+# upload policy is left alone: agi keeps --noremote_upload_local_results.
+common --remote_cache=grpc://bazelremote-dev-grpc.pplx.net
+common --remote_cache_compression
