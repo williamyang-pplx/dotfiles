@@ -13,6 +13,8 @@ Current defaults:
     permission prompts.
   - skipDangerousModePermissionPrompt = true: suppresses the one-time
     bypass-mode acceptance dialog a fresh machine would otherwise show.
+  - modelSettings.claude-opus-5-5.effortLevel = high: Opus 5.5 sessions
+    default to high thinking effort.
 """
 
 import json
@@ -37,6 +39,11 @@ def main() -> None:
 
     if "skipDangerousModePermissionPrompt" not in settings:
         settings["skipDangerousModePermissionPrompt"] = True
+        changed = True
+
+    opus_settings = settings.setdefault("modelSettings", {}).setdefault("claude-opus-5-5", {})
+    if "effortLevel" not in opus_settings:
+        opus_settings["effortLevel"] = "high"
         changed = True
 
     if changed:
