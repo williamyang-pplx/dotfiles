@@ -124,6 +124,16 @@ for dest_root in "${SKILL_DEST_ROOTS[@]}"; do
     ln -s "$src" "$dest"
     echo "Linked $dest -> $src"
   done
+
+  # Drop links into this repo's skills/ that no longer point at a skill:
+  # renamed/deleted skills, or the category dirs an older layout linked.
+  for dest in "$dest_root"/*; do
+    [[ -L "$dest" ]] || continue
+    target="$(readlink "$dest")"
+    [[ "$target" == "$DOTFILES_DIR/skills/"* && ! -f "$target/SKILL.md" ]] || continue
+    rm "$dest"
+    echo "Removed stale skill link $dest"
+  done
 done
 
 # Personal commands, symlinked onto PATH.

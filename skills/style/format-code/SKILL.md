@@ -1,6 +1,6 @@
 ---
 name: format-code
-description: Reformat code to William's personal style preferences (naming, structure, comments, language idioms). Use when asked to format, restyle, or clean up the style of code. Style-only — never changes behavior; use error-review for bug hunting.
+description: Reformat code to William's personal style preferences (naming, structure, comments, language idioms). Use when asked to format, restyle, or clean up the style of code. Style-only — never changes behavior; use quick-review or deep-review-my-pr for bug hunting.
 ---
 
 # Format code to personal style
@@ -33,7 +33,7 @@ onto it:
   tool and keep its output. Apply the personal preferences below only where the
   tool leaves room (naming, structure, comments).
 - Behavior-preserving only. If you spot a bug while formatting, list it at the
-  end for follow-up — do not fix it in this pass (that's error-review's job).
+  end for follow-up — do not fix it in this pass (that's quick-review's or deep-review-my-pr's job).
 - Keep diffs minimal: restyle the code in scope, don't reflow untouched files.
 
 ## Style preferences
@@ -90,6 +90,6 @@ and functions that explain what's being tested clearly.
   /push-stacked-pr skill with that PR as the bottom of the stack — never a
   plain `git push` — so the branch and everything stacked above it are
   rebased and pushed together. Then automatically update the PR description:
-  invoke the /pr-authoring skill at the end so the description reflects
+  invoke the /pplx-aster:pr-authoring skill at the end so the description reflects
   the updated diff, then invoke the /shorten-pr-description skill on the
   result as the final pass.

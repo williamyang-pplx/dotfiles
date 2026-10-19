@@ -1,6 +1,6 @@
 ---
 name: shorten-pr-description
-description: Rewrite a pull request's description to be short and scannable — at most 150 words, bulleted summary, and no Testing or Reviewer Notes sections unless the user asks to keep them. Use when asked to shorten, trim, tighten, or condense a PR description. Also invoked automatically as the final pass by skills that write or update PR descriptions (pr-authoring and its callers).
+description: Rewrite a pull request's description to be short and scannable — at most 150 words, bulleted summary, and no Testing or Reviewer Notes sections unless the user asks to keep them. Use when asked to shorten, trim, tighten, or condense a PR description. Also invoked automatically as the final pass by skills that write or update PR descriptions (pplx-aster:pr-authoring and its callers).
 ---
 
 # Shorten a PR description
@@ -46,7 +46,7 @@ identifiers, and diagrams are untouchable in both skills.
 
 ## When invoked from another skill
 
-Skills that author or update PR descriptions (`pr-authoring`, and callers
+Skills that author or update PR descriptions (`pplx-aster:pr-authoring`, and callers
 like linear-ticket, e2e-test, address-pr-comments, format-code) invoke this
 skill as their final pass. In that case, two exceptions to the rules above:
 

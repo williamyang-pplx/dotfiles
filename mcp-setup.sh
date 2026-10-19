@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Register remote MCP servers for the coding agents (Claude Code + Codex).
+# Register remote MCP servers for the coding agents (Claude Code + Codex), plus
+# agi's pplx-aster Claude Code plugin when an agi checkout is present.
 #
 # Why this is separate from install.sh: devbox replays dotfiles during
 # provisioning, *before* `claude`/`codex` are installed. Registering there is a
@@ -74,6 +75,31 @@ if command -v codex &>/dev/null; then
       failures=$((failures + 1))
     fi
   done
+fi
+
+# agi's pplx-aster plugin provides pr-authoring and refactoring-code, which the
+# dotfiles skills call as pplx-aster:<skill>. Its marketplace is the agi repo
+# itself, so this needs a local checkout ($AGI_DIR, else a default path); boxes
+# without one skip it. Lives here, not in install.sh, for the same reason as MCP.
+if [[ -z "${AGI_DIR:-}" ]]; then
+  for candidate in "$HOME/Documents/agi" "$HOME/agi"; do
+    if [[ -f "$candidate/.claude-plugin/marketplace.json" ]]; then
+      AGI_DIR="$candidate"
+      break
+    fi
+  done
+fi
+
+if command -v claude &>/dev/null && [[ -n "${AGI_DIR:-}" ]]; then
+  if timeout -k 5 "$ADD_TIMEOUT" claude plugin list </dev/null 2>/dev/null | grep -q 'pplx-aster@pplx-agi'; then
+    :
+  elif timeout -k 5 60 claude plugin marketplace add "$AGI_DIR" </dev/null &>/dev/null \
+      && timeout -k 5 60 claude plugin install pplx-aster@pplx-agi --scope user </dev/null &>/dev/null; then
+    echo "claude: installed plugin 'pplx-aster@pplx-agi'"
+  else
+    echo "claude: failed to install plugin 'pplx-aster@pplx-agi' (install it manually later)" >&2
+    failures=$((failures + 1))
+  fi
 fi
 
 # Only mark done on a clean pass, so transient failures are retried next shell.

@@ -85,7 +85,7 @@ sure about.
 8. Other human threads: summarize the thread and your proposed response back
    to William; let him reply.
 9. If any code changes were pushed, automatically update the PR description:
-   invoke the /pr-authoring skill at the end so the description reflects
+   invoke the /pplx-aster:pr-authoring skill at the end so the description reflects
    the updated diff, then invoke the /shorten-pr-description skill on the
    result as the final pass.
 

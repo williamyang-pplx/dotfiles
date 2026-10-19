@@ -133,7 +133,7 @@ Only after the user has approved the plan:
    buildifier) before considering the work done.
 5. Commit the work, push the branch, and open the PR **as a draft**
    (`gh pr create --draft`). Every PR starts in draft mode — the user decides
-   when to mark it ready for review. Use the `pr-authoring` skill for the
+   when to mark it ready for review. Use the `pplx-aster:pr-authoring` skill for the
    title and description, then invoke the /shorten-pr-description skill on
    the finished description as the final pass before opening the PR — the
    description that lands on the draft PR must already be the shortened

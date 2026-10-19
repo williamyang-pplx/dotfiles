@@ -74,17 +74,31 @@ directory, so skills created directly on a devbox coexist with repo-managed ones
 
 Current skills:
 
-- **format-code** — restyles code to my personal preferences (the editable
-  "Style preferences" section in its `SKILL.md`); defers to project formatter configs.
-- **simple-english** — vendored unmodified from
+- **pr-review/** — `deep-review-my-pr` and `deep-review-other-pr` (multi-agent
+  reviews), `quick-review` (single-agent re-review), `deletion-pass`, `e2e-test`
+  (manual e2e on a stacked branch), `ci-fix`, `address-pr-comments`,
+  `shorten-pr-description`.
+- **pr-setup/** — `linear-ticket` (plan mode, then implement a Linear ticket).
+- **helpers/** — `low-level-plan`, `save-plan`, `rebase-with-parent`,
+  `push-stacked-pr`, `prune-worktrees`, `open-pr-vscode`, `import-session`,
+  `write-aster-linear-ticket`, `push-dotfiles-data`.
+- **style/** — `format-code` (my personal style; the editable "Style preferences"
+  section in its `SKILL.md`, deferring to project formatter configs),
+  `short-nice-response`, and `simple-english`, vendored unmodified from
   [AminBlg/SimpleEnglish](https://github.com/AminBlg/SimpleEnglish) (MIT), which rewrites
   prose per ASD-STE100 Simplified Technical English. It replaced my hand-written
   `human-voice` skill; re-vendor from upstream rather than editing it in place.
 
+Some skills call `pplx-aster:pr-authoring` and `pplx-aster:refactoring-code`, which
+live in agi's `pplx-aster` Claude Code plugin. `mcp-setup.sh` installs it at user
+scope from a local agi checkout (`$AGI_DIR`, else `~/Documents/agi` or `~/agi`); boxes
+without one skip the install, and the skills skip those steps there.
+
 Invoke explicitly (`/format-code` in Claude Code, `$format-code` in Codex) or let the
 agent pick them up implicitly from the task. To add a skill, create
 `skills/<category>/<name>/SKILL.md` (frontmatter `name` must match the directory) and
-rerun `install.sh`. A skill may ship a Claude Code Workflow script next to its
+rerun `install.sh`, which also removes links to skills that were renamed or deleted
+from the repo. A skill may ship a Claude Code Workflow script next to its
 `SKILL.md`; the skill calls it by `scriptPath` and falls back to its prose steps in
 Codex.
 

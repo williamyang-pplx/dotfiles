@@ -66,7 +66,7 @@ The parser lives next to this file: `import_session.py` (in the skill dir).
 ## Notes
 
 - `$SKILL_DIR` is this skill's directory. If it isn't set, use the absolute
-  path `~/Documents/dotfiles/skills/session/import-session`.
+  path `~/Documents/dotfiles/skills/helpers/import-session`.
 - This is read-only: it never modifies the other session or writes to disk.
 - If the user wants the imported context to persist across future sessions
   (not just this one), offer to save the briefing to memory or `CLAUDE.md`.

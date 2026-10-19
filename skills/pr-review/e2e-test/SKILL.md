@@ -98,7 +98,7 @@ PR branch, not the e2e branch. Report the bug to the user.
 
 ## 7. Update the PR description
 
-Invoke the `pr-authoring` skill to add the result to the description's
+Invoke the `pplx-aster:pr-authoring` skill to add the result to the description's
 testing section (**Testing Strategy** if the repo's template uses that name,
 otherwise **Testing**). That skill owns the format and the rules for edits to
 an existing description. Give it one short bullet per run:
@@ -112,7 +112,7 @@ one target, write one bullet for each. Do not change the rest of the
 description. After the update, invoke the /shorten-pr-description skill as
 the final pass; its invoked-from-another-skill rules keep the testing
 section and the bullets you just added. If a human deleted the testing section, follow the rules of
-`pr-authoring` and put the result in the final report instead.
+`pplx-aster:pr-authoring` and put the result in the final report instead.
 
 ## 8. Report
 
