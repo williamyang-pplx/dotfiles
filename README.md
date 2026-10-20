@@ -116,7 +116,7 @@ scripts in sync with the agi originals if they change there.
 
 ## MCP servers (Claude Code + Codex)
 
-`mcp-setup.sh` registers remote MCP servers for Notion, Linear, and Google Workspace
+`mcp-setup.sh` registers remote MCP servers for Linear and Google Workspace
 (Gmail/Calendar/Drive) in `claude` and `codex`, whichever is present.
 
 **Why not in `install.sh`?** devbox replays dotfiles during provisioning, *before*
@@ -133,7 +133,7 @@ manually afterward:
 - **Claude Code**: `claude` → `/mcp` → authenticate each server.
 - **Codex**: `codex mcp login <name>` for each server.
 
-Notion and Linear use a plain browser OAuth flow that works out of the box. The Google
+Linear uses a plain browser OAuth flow that works out of the box. The Google
 Workspace servers additionally require **your own** Google Cloud OAuth client ID/secret
 (create a Web-application OAuth client, enable the Gmail/Calendar/Drive APIs) — see
 [Google's MCP setup docs](https://developers.google.com/workspace/guides/configure-mcp-servers).

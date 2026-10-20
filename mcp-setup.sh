@@ -16,7 +16,6 @@ set -uo pipefail   # deliberately NOT -e: one failed `add` must not skip the res
 
 #   name|url
 MCP_SERVERS=(
-  "notion|https://mcp.notion.com/mcp"
   "linear|https://mcp.linear.app/mcp"
   "gmail|https://gmailmcp.googleapis.com/mcp/v1"
   "gcalendar|https://calendarmcp.googleapis.com/mcp/v1"
@@ -112,7 +111,7 @@ if (( registered > 0 )); then
 MCP servers registered. Complete the one-time OAuth login per tool:
   - Claude Code: run `claude`, then `/mcp` and authenticate each server.
   - Codex:       run `codex mcp login <name>` for each server.
-Notion and Linear log in with a plain browser OAuth flow. The Google
+Linear logs in with a plain browser OAuth flow. The Google
 (gmail/gcalendar/gdrive) servers additionally require your own Google Cloud
 OAuth client ID/secret — see README for details.
 EOF
