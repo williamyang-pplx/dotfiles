@@ -1,0 +1,16 @@
+{
+  "description": "the `{host}` devbox",
+  "params": ["host"],
+  "probes": [
+    {
+      "name": "devbox answers over SSH",
+      "cmd": "ssh -o BatchMode=yes -o ConnectTimeout=15 {host} true",
+      "fix": "the devbox is stopped or SSH auth lapsed; ask the user to resume it or run `! devbox auth login`"
+    },
+    {
+      "name": "agi checkout exists on the devbox",
+      "cmd": "ssh -o BatchMode=yes -o ConnectTimeout=15 {host} test -d /home/dev/agi/.git",
+      "fix": "the devbox has no /home/dev/agi checkout; ask the user which repo path to test from"
+    }
+  ]
+}

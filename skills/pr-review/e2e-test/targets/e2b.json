@@ -1,0 +1,13 @@
+{
+  "description": "a real e2b.dev account",
+  "env": {
+    "E2B_API_KEY": "ask the user to export an API key from their e2b.dev dashboard"
+  },
+  "probes": [
+    {
+      "name": "e2b API accepts the key",
+      "cmd": "curl -sSf -o /dev/null --max-time 20 -H \"X-API-Key: $E2B_API_KEY\" https://api.e2b.dev/sandboxes",
+      "fix": "the key is wrong or revoked; ask the user for a fresh one"
+    }
+  ]
+}
