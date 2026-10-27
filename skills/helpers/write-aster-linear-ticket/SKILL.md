@@ -1,6 +1,6 @@
 ---
 name: write-aster-linear-ticket
-description: Write a new Linear ticket for the Aster project — captures the ask as a high-level, intentionally-broad ticket that points at the design direction and the files it might touch, without prescribing low-level design. Use when asked to write, draft, file, or open an Aster ticket/issue (e.g. "write an Aster ticket for X", "file this under Aster"). Always creates the ticket under the Aster project on the AI team, assigned to William Yang, in Todo by default.
+description: Write a new Linear ticket for the Aster project — captures the ask as a high-level, intentionally-broad ticket that points at the design direction and the files it might touch, without prescribing low-level design. Use when asked to write, draft, file, or open an Aster ticket/issue (e.g. "write an Aster ticket for X", "file this under Aster"). Always creates the ticket under the Aster project on the Aster team (key AST), assigned to William Yang, in Todo by default.
 ---
 
 # Write an Aster Linear ticket
@@ -82,7 +82,7 @@ human-sounding bullets over dense prose.
 Create the issue with `mcp__linear__save_issue`, always with these fixed
 values for Aster:
 
-* `team`: `AI`
+* `team`: `Aster`
 * `project`: `Aster`
 * `state`: `Todo`  ← default for every Aster ticket unless the user specifies
   a different state (e.g. explicitly asks for Backlog)
@@ -92,7 +92,9 @@ values for Aster:
 
 Do **not** set a priority or estimate unless the user explicitly asks. (For
 reference, the Aster project id is `555d92f9-fa04-47d8-9ed4-18238a0c8602` and
-it sits on the AI team; passing the names above resolves to these.)
+it sits on the Aster team, key `AST`, id `e8ef115d-e8b2-41ea-ab98-9b1411e44e6f`;
+passing the names above resolves to these. Filing under the AI team fails because
+the project is not linked to it.)
 
 Before creating, if the user asked for several tickets, draft them all and show
 the drafts for a quick look before filing — it's cheap to fix a title or
@@ -100,7 +102,7 @@ pointer before the issue exists.
 
 ## 4. Report
 
-Give the user the created issue's key (e.g. `AI-1234`) and URL, and a one-line
+Give the user the created issue's key (e.g. `AST-1234`) and URL, and a one-line
 recap of each ticket's goal. If you asked no clarifying questions but made
 assumptions to fill gaps, note them so the user can correct the ticket.
 
