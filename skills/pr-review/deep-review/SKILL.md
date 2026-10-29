@@ -1,13 +1,13 @@
 ---
 name: deep-review
-description: Deep-review a pull request — yours before requesting human review, or a teammate's — for AI-generated slop, clear bugs, structural regressions, duplication of existing code, missed reuse opportunities, style/convention violations, file/project layout, and better abstractions. Fans out subagents to search the codebase and docs, then reports findings with file:line in the chat. Use when asked to deep-review, self-review, bot-review, or peer-review a PR. Never writes to GitHub for William's own PRs; on a teammate's PR, posts only when explicitly asked, and every posted comment says it came from Will's bot.
+description: Deep-review a pull request — yours before requesting human review, or a teammate's — for AI-generated slop, clear bugs, structural regressions, duplication of existing code, missed reuse opportunities, style/convention violations, file/project layout, better abstractions, and components that don't need to exist (adversarial simplification). Fans out subagents to search the codebase and docs, then reports findings with file:line in the chat. Use when asked to deep-review, self-review, bot-review, or peer-review a PR. Never writes to GitHub for William's own PRs; on a teammate's PR, posts only when explicitly asked, and every posted comment says it came from Will's bot.
 ---
 
 # Deep-review a pull request
 
 Review a PR across every axis: AI slop a careful author wouldn't have written,
 clear bugs, duplication, missed reuse, style/convention, structural quality,
-and file layout. The same review runs on William's own PRs and on teammates'
+file layout, and whether each component needs to exist at all. The same review runs on William's own PRs and on teammates'
 PRs; only the reporting differs (see "Whose PR it is").
 
 ## In Claude Code: run the deep-review-pr workflow
@@ -53,12 +53,23 @@ current user (`gh api user -q .login`).
      parent/sub-issues, blocks/blocked-by), find the PRs that implemented
      those tickets, and report what they changed and any conventions or
      decisions this PR should be consistent with.
-   - **Related code** — callers and callees of every modified function,
-     similar existing implementations, canonical helpers the diff might
-     duplicate, the types/contracts it touches, and how neighboring code in
-     the same modules handles the same concerns (errors, config, naming).
+   - **Callers and contracts** — every caller and callee of each modified
+     function, and every consumer of each changed signature, type, schema,
+     config key, CLI flag, env var, or serialized format — across languages,
+     configs, and YAML, followed at least two hops out. For each consumer,
+     report whether the PR updated it and what breaks if it didn't.
+   - **Neighboring patterns** — read (not just grep) the sibling code in the
+     same modules and packages, and report how it handles the concerns the
+     diff touches: errors, config, naming, typing, logging, data shapes, and
+     extension points, each with a `file:line` example.
    - **History** — `git blame` / `git log` on the changed lines and prior PRs
      touching them: a "bug" may be a deliberate fix, or already flagged.
+   - **Past review comments** — for each changed file, find the recent merged
+     PRs that touched it (`git log` on the path, then the `(#123)` in the
+     subjects) and read their review comments (`gh api
+     repos/<owner>/<repo>/pulls/<n>/comments`). Report what reviewers
+     repeatedly pushed on in this area — the bar this PR will be held to —
+     quoting the comments.
    - **Duplication sweep** — search the codebase for existing implementations
      of what the PR adds: canonical helpers, similar functions in sibling
      modules, utilities the diff re-implements. Search by behavior (what it
@@ -71,8 +82,12 @@ current user (`gh api user -q .login`).
      docs, wiki/RFC pages, and READMEs covering the touched area; report the
      documented conventions and invariants the PR must obey.
 6. Consolidate the reports into one context brief — intent, related tickets
-   and their PRs, related code, prior history, candidate duplicates, and
-   conventions — and review against it, not just the raw diff.
+   and their PRs, callers and contracts, neighboring patterns, prior history,
+   past reviewer concerns, candidate duplicates, and conventions — and review
+   against it, not just the raw diff.
+7. After the first review pass, ask what it missed: changed files, contract
+   consumers, or risks from the reports that no finding examined. Probe each
+   gap with a fresh, targeted pass before verifying.
 
 ## Axis 1: AI slop
 
@@ -115,7 +130,7 @@ Using the PR's stated intent as the spec:
 - Error handling: swallowed exceptions, missing cleanup, resource leaks.
 - State/concurrency: races, check-then-act, shared or default-arg mutation.
 - Interface misuse: wrong argument order, mismatched types, callers not updated
-  for a signature or contract change (use the related-code report — the bug is
+  for a signature or contract change (use the callers-and-contracts report — the bug is
   often in an untouched caller).
 - Security: injection, secrets in code or logs, unvalidated input, unsafe
   deserialization, path traversal.
@@ -217,6 +232,40 @@ utils location, the config file). Match an existing project layout over
 imposing this one — if the repo already has a settled convention, judge against
 that and note the divergence.
 
+## Axis 8: Simplification — does each component need to exist?
+
+Adapted from `/simplify`. List every component the PR adds or grows — files,
+classes, functions, parameters and flags, config keys and env vars, constants,
+fields and state, branches and special cases, tests, dependencies — and
+challenge each one adversarially: assume it should not exist in its current
+form, and try to prove it. Judge against the repo's AGENTS.md/CLAUDE.md rules
+and what the codebase already has, not taste.
+
+Challenge each component from five angles:
+
+- **Reuse**: the codebase already does this — a shared/utility module or a
+  file next to the change has the helper, type, constant, or pattern. Name it
+  by `file:line` and call it instead.
+- **Simplification**: complexity the job doesn't need — redundant or derivable
+  state, copy-paste with slight variation, deep nesting, dead code left
+  behind, a layer or helper the flow doesn't need. Name the simpler form that
+  does the same job.
+- **Efficiency**: work that doesn't need to happen — redundant computation or
+  repeated I/O, independent operations run sequentially, blocking work added
+  to startup or hot paths, long-lived closures holding a large scope. Name the
+  cheaper form.
+- **Altitude**: a symptom patched instead of the root cause — special cases
+  layered on shared infrastructure mean the fix isn't deep enough. Name the
+  change to the underlying mechanism that makes the component unnecessary.
+- **Conventions**: an AGENTS.md/CLAUDE.md rule that rules the component out or
+  makes it redundant (no wrappers, constants inline until shared, errors in
+  `errors.py`, ...). Quote the rule and its path.
+
+A challenge is a finding only with a behavior-preserving replacement in hand:
+delete it, call `X` at `file:line`, inline it, derive it from `Y`, merge it
+into `Z`, or move the fix into mechanism `M`. Axis 6 judges the shape of the
+change as a whole; this axis judges each component's right to exist.
+
 ## Helper placement: check the roadmap
 
 Helper verdicts depend on what code will exist soon, not just today. When a PR
@@ -234,7 +283,15 @@ each candidate ticket to judge real reuse:
 
 ## Verify before reporting
 
-Adversarially check each candidate. Bugs: keep only with a concrete triggering
+Adversarially check each candidate. A high or medium bug gets three
+independent skeptics — one traces whether the triggering input really reaches
+the line, one checks whether the behavior is intentional (description,
+history, comments, docs), one looks for a guard elsewhere (a caller, a type, a
+framework) — and it survives unless a majority refute it. A simplification
+finding gets two defenders arguing to keep the component — one names behavior
+the replacement would lose (callers, runtime paths, tests), one names a
+requirement for it (description, ticket, AGENTS.md, roadmap) — and it dies if
+either makes its case with concrete evidence. Bugs: keep only with a concrete triggering
 input or sequence. Slop: keep only if removal leaves the PR strictly better.
 Duplication/reuse: keep only with the existing or destination code cited by
 `file:line`. Style: keep only egregious violations removal strictly improves.
@@ -256,15 +313,16 @@ Always drop:
 
 1. Each finding follows:
    - **Location**: `file:line` (multi-line spans as `file:start-end`)
-   - **Axis**: slop, bug (high/medium/low), duplication, reuse, style,
-     structure/design, or layout
-   - **Why**: bug → triggering scenario; duplication/reuse → the existing or
+   - **Axis**: slop, bug (high/medium/low), simplification, duplication,
+     reuse, style, structure/design, or layout
+   - **Why**: bug → triggering scenario; simplification → the angle and what
+     replaces the component; duplication/reuse → the existing or
      destination code; slop → what a human would have written; style/design →
      the convention or simpler shape; layout → the file/utils/config
      destination it should move to
    - **Fix**: concrete and minimal
-2. Order findings bugs → structure/design → layout → duplication/reuse → slop
-   → style, by severity. Don't flood slop nits when structural issues exist.
+2. Order findings bugs → simplification → structure/design → layout →
+   duplication/reuse → slop → style, by severity. Don't flood slop nits when structural issues exist.
 3. Open with a one-line verdict — own PR: clean / minor cleanup / needs work;
    teammate's PR: approve / approve with nits / needs work — then the
    findings. If nothing survives, say the PR looks clean and name what was
