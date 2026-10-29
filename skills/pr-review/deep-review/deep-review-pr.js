@@ -15,11 +15,11 @@ export const meta = {
 const INPUTS = null  // @prefetch
 
 const TUNING = {
-  lens: { effort: 'medium' },
+  lens: { agentType: 'Explore', model: 'sonnet', effort: 'medium' },
   find: { effort: 'medium' },
   findBug: { effort: 'high' },
   critic: { effort: 'high' },
-  inventory: { effort: 'low' },
+  inventory: { model: 'sonnet', effort: 'low' },
   challenge: { effort: 'high' },
   verify: { agentType: 'Explore', model: 'sonnet', effort: 'low' },
   verifyBug: { effort: 'medium' },
