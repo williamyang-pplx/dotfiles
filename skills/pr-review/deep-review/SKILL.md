@@ -13,10 +13,12 @@ the reporting differs (see "Whose PR it is").
 ## In Claude Code: run the deep-review-pr workflow
 
 1. From the PR's repo, run
-   `<this skill's base directory>/prefetch.py <pr> <this skill's base directory>/SKILL.md`.
+   `<this skill's base directory>/prefetch.py <pr>`.
    It prints the path of a generated `run.js`.
 2. Call `Workflow({scriptPath: "<that path>"})`.
-3. The result's `mine` says whose PR it is. Format the returned `findings` per
+3. Write the returned result, as JSON, to `result.json` next to `run.js`, so a
+   later `/quick-review` can re-review from it instead of starting cold.
+4. The result's `mine` says whose PR it is. Format the returned `findings` per
    "Report" below (already in report order), then list `unverified` findings
    and `failed` stages separately. A run with either is never "clean" or
    "approve".
