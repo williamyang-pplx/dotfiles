@@ -74,8 +74,8 @@ directory, so skills created directly on a devbox coexist with repo-managed ones
 
 Current skills:
 
-- **pr-review/** — `deep-review-my-pr` and `deep-review-other-pr` (multi-agent
-  reviews), `quick-review` (single-agent re-review), `deletion-pass`, `e2e-test`
+- **pr-review/** — `deep-review` (multi-agent review of your own or a teammate's
+  PR), `quick-review` (single-agent re-review), `deletion-pass`, `e2e-test`
   (manual e2e on a stacked branch), `ci-fix`, `address-pr-comments`,
   `shorten-pr-description`.
 - **pr-setup/** — `linear-ticket` (plan mode, then implement a Linear ticket).

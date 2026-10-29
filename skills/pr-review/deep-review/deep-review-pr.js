@@ -26,36 +26,20 @@ const MAX_SHARDS = 6
 // Axis labels come from here, never from the model. `lenses` are the only
 // reports a finder waits on; `verifyLenses` are awaited by its verifiers
 // instead, off the finder's critical path. `family` groups axes whose findings
-// at overlapping lines are the same finding. Finders are listed in each
-// skill's "## Report" order.
-const MODES = {
-  mine: {
-    lenses: ['Linear lineage', 'Related code', 'History', 'Duplication sweep', 'Reuse candidates', 'Docs and conventions', 'Test landscape'],
-    finders: [
-      { axis: 2, label: 'bug', family: 'bug', lenses: [], verifyLenses: ['History'], shard: true },
-      { axis: 3, label: 'testing', family: 'testing', lenses: ['Test landscape'] },
-      { axis: 7, label: 'structure/design', family: 'shape', lenses: ['Related code'] },
-      { axis: 8, label: 'layout', family: 'shape', lenses: ['Docs and conventions'] },
-      { axis: 4, label: 'duplication', family: 'shape', lenses: ['Duplication sweep', 'Related code'] },
-      { axis: 5, label: 'reuse', family: 'shape', lenses: ['Reuse candidates', 'Linear lineage'] },
-      { axis: 1, label: 'slop', family: 'surface', lenses: ['Docs and conventions'], shard: true },
-      { axis: 6, label: 'style', family: 'surface', lenses: ['Docs and conventions'] },
-    ],
-  },
-  other: {
-    lenses: ['Related code', 'Duplication sweep', 'Reuse candidates', 'Docs and conventions', 'Test landscape'],
-    finders: [
-      { axis: 1, label: 'correctness', family: 'bug', lenses: [], shard: true },
-      { axis: 2, label: 'testing', family: 'testing', lenses: ['Test landscape'] },
-      { axis: 6, label: 'design', family: 'shape', lenses: ['Related code'] },
-      { axis: 3, label: 'duplication', family: 'shape', lenses: ['Duplication sweep', 'Related code'] },
-      { axis: 4, label: 'reuse', family: 'shape', lenses: ['Reuse candidates'] },
-      { axis: 5, label: 'style', family: 'surface', lenses: ['Docs and conventions'] },
-    ],
-  },
-}
+// at overlapping lines are the same finding. Finders are listed in SKILL.md's
+// "## Report" order.
+const LENSES = ['Linear lineage', 'Related code', 'History', 'Duplication sweep', 'Reuse candidates', 'Docs and conventions']
+const FINDERS = [
+  { axis: 2, label: 'bug', family: 'bug', lenses: [], verifyLenses: ['History'], shard: true },
+  { axis: 6, label: 'structure/design', family: 'shape', lenses: ['Related code'] },
+  { axis: 7, label: 'layout', family: 'shape', lenses: ['Docs and conventions'] },
+  { axis: 3, label: 'duplication', family: 'shape', lenses: ['Duplication sweep', 'Related code'] },
+  { axis: 4, label: 'reuse', family: 'shape', lenses: ['Reuse candidates', 'Linear lineage'] },
+  { axis: 1, label: 'slop', family: 'surface', lenses: ['Docs and conventions'], shard: true },
+  { axis: 5, label: 'style', family: 'surface', lenses: ['Docs and conventions'] },
+]
 
-if (!INPUTS || !MODES[INPUTS.mode]) {
+if (!INPUTS) {
   throw new Error('deep-review-pr: run the run.js that prefetch.py generates, not this template')
 }
 
@@ -67,6 +51,9 @@ const LENS_EXTRA = {
 
 // Identical leading text across every agent, so it's cache-friendly.
 const RULES = `You are one subagent inside the deep-review-pr workflow for PR ${INPUTS.pr} at ${INPUTS.headSha}.
+${INPUTS.mine
+  ? 'This is William\'s own PR, about to go to human review: catch what a reviewer would.'
+  : `This is a teammate's PR (author ${INPUTS.author}): assume competence; structure/design and layout findings must clearly pay for the churn of restructuring their nearly-done work.`}
 PR description (the spec):
 ${INPUTS.description}
 
@@ -150,12 +137,11 @@ function dedupe(confirmed) {
     .map(({ file, start, end, axis, severity, why, fix }) => ({ file, start, end, axis, severity, why, fix }))
 }
 
-const mode = MODES[INPUTS.mode]
 const failed = []
 
 // Every lens starts now, ahead of any finder, so lenses take the first slots.
 // Never rejects, so one dead lens can't sink the finders waiting on it.
-const lensRuns = Object.fromEntries(mode.lenses.map(name => [name, agent(
+const lensRuns = Object.fromEntries(LENSES.map(name => [name, agent(
   `${RULES}\n\nYour lens:\n${INPUTS.rubric.lens[name]}\n${LENS_EXTRA[name]?.() ?? ''}\nReturn a concise report.`,
   { label: `lens:${name}`, phase: 'Gather', ...TUNING.lens })
   .catch(() => null)
@@ -164,7 +150,7 @@ const lensRuns = Object.fromEntries(mode.lenses.map(name => [name, agent(
 const lensText = names => Promise.all(names.map(n => lensRuns[n] ?? null))
   .then(rs => rs.map((r, i) => `### ${names[i]}\n${r ?? '(lens unavailable)'}`).join('\n\n'))
 
-const tasks = mode.finders.flatMap((f, order) => {
+const tasks = FINDERS.flatMap((f, order) => {
   if (!f.shard) return [{ ...f, order, paths: null, key: f.label }]
   const shards = shardFiles(INPUTS.files)
   return shards.map((paths, i) => ({ ...f, order, paths, key: shards.length > 1 ? `${f.label}#${i + 1}` : f.label }))
@@ -219,6 +205,7 @@ for (const item of results) {
 const findings = dedupe(confirmed)
 log(`${findings.length} confirmed, ${unverified.length} unverified, ${failed.length} stages failed`)
 return {
+  mine: INPUTS.mine,
   findings,
   unverified: unverified.map(({ file, start, end, axis, severity, why, fix }) => ({ file, start, end, axis, severity, why, fix })),
   failed,

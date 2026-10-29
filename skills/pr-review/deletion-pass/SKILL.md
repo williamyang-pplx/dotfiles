@@ -1,6 +1,6 @@
 ---
 name: deletion-pass
-description: Aggressive deletion review of a pull request — scan the PR's code for anything that can be outright deleted (dead code, unnecessary abstractions, single-use helpers, wrappers, duplicated logic that an existing helper already covers) and remove it, verifying behavior is preserved after each cut. Use when asked to do a deletion pass, slim down a PR, find what can be deleted, or aggressively remove unnecessary code or abstractions. Deletion only — never restructures, never adds code; use pplx-aster:refactoring-code for restructuring and quick-review or deep-review-my-pr for bug hunting.
+description: Aggressive deletion review of a pull request — scan the PR's code for anything that can be outright deleted (dead code, unnecessary abstractions, single-use helpers, wrappers, duplicated logic that an existing helper already covers) and remove it, verifying behavior is preserved after each cut. Use when asked to do a deletion pass, slim down a PR, find what can be deleted, or aggressively remove unnecessary code or abstractions. Deletion only — never restructures, never adds code; use pplx-aster:refactoring-code for restructuring and quick-review or deep-review for bug hunting.
 ---
 
 # Deletion pass over a pull request

@@ -1,36 +1,49 @@
 ---
-name: deep-review-my-pr
-description: Deep-review your own pull request before requesting human review — AI-generated slop, clear bugs, structural regressions, correctness, test sufficiency (including e2e for mission-critical changes), duplication of existing code, missed reuse opportunities, style/convention violations, and better abstractions. Fans out subagents to search the codebase and docs, then reports findings with file:line in the chat. Never writes to GitHub. Use when asked to deep-review, self-review, or bot-review your own PR.
+name: deep-review
+description: Deep-review a pull request — yours before requesting human review, or a teammate's — for AI-generated slop, clear bugs, structural regressions, duplication of existing code, missed reuse opportunities, style/convention violations, file/project layout, and better abstractions. Fans out subagents to search the codebase and docs, then reports findings with file:line in the chat. Use when asked to deep-review, self-review, bot-review, or peer-review a PR. Never writes to GitHub for William's own PRs; on a teammate's PR, posts only when explicitly asked, and every posted comment says it came from Will's bot.
 ---
 
-# Deep-review your own pull request
+# Deep-review a pull request
 
-Review your own PR before you ask a human to, across every axis: AI slop a
-careful author wouldn't have written, clear bugs, structural regressions,
-correctness, sufficient testing, duplication, missed reuse, style/convention,
-and better abstractions. This is your work about to go in front of a
-reviewer — catch what they'd catch first. Report the surviving findings to
-the user in the chat; never write anything to GitHub.
+Review a PR across every axis: AI slop a careful author wouldn't have written,
+clear bugs, duplication, missed reuse, style/convention, structural quality,
+and file layout. The same review runs on William's own PRs and on teammates'
+PRs; only the reporting differs (see "Whose PR it is").
 
 ## In Claude Code: run the deep-review-pr workflow
 
 1. From the PR's repo, run
-   `<this skill's base directory>/prefetch.py <pr> mine <this skill's base directory>/SKILL.md`.
+   `<this skill's base directory>/prefetch.py <pr> <this skill's base directory>/SKILL.md`.
    It prints the path of a generated `run.js`.
 2. Call `Workflow({scriptPath: "<that path>"})`.
-3. Format the returned `findings` per "Report" below (already in report order),
-   then list `unverified` findings and `failed` stages separately. A run with
-   either is never "clean".
+3. The result's `mine` says whose PR it is. Format the returned `findings` per
+   "Report" below (already in report order), then list `unverified` findings
+   and `failed` stages separately. A run with either is never "clean" or
+   "approve".
 
 Without the Workflow tool (Codex), follow the steps below.
+
+## Whose PR it is
+
+Compare the PR author (`gh pr view <pr> --json author -q .author.login`) to the
+current user (`gh api user -q .login`).
+
+- **Own PR**: this is William's work about to go in front of a reviewer —
+  catch what they'd catch first. Findings go to the chat only; never write to
+  GitHub.
+- **Teammate's PR**: this is a colleague's work, not a bot's — assume
+  competence, judge against the codebase's actual conventions, and only report
+  findings a good human reviewer would bother to write. Structure/design and
+  layout findings must clearly pay for the churn of restructuring someone
+  else's nearly-done work. Post to GitHub only when explicitly asked, and
+  never push to their branch.
 
 ## Gather context
 
 1. Identify the PR (argument, current branch via `gh pr view`, or ask). Record
    `owner`, `repo`, PR `number`, and the head commit SHA
    (`gh pr view --json number,headRefName,headRefOid,url`).
-2. Read the description and commits — judge the diff against stated intent, and
-   note what the description claims about testing.
+2. Read the description and commits — judge the diff against stated intent.
 3. Fetch the diff (`gh pr diff`); never comment on untouched lines.
 4. Check existing review comments to avoid duplicating feedback.
 5. Fan out read-only subagents in parallel (one message, multiple Agent calls),
@@ -57,14 +70,9 @@ Without the Workflow tool (Codex), follow the steps below.
    - **Docs and conventions** — relevant AGENTS.md/CLAUDE.md files, design
      docs, wiki/RFC pages, and READMEs covering the touched area; report the
      documented conventions and invariants the PR must obey.
-   - **Test landscape** — how the touched code is currently tested: unit
-     targets, integration/e2e suites, fixtures, CI jobs. Report what coverage
-     exists so gaps in the PR's testing can be judged against it, not against
-     an abstract ideal.
 6. Consolidate the reports into one context brief — intent, related tickets
-   and their PRs, related code, prior history, candidate duplicates,
-   conventions, existing test coverage — and review against it, not just the
-   raw diff.
+   and their PRs, related code, prior history, candidate duplicates, and
+   conventions — and review against it, not just the raw diff.
 
 ## Axis 1: AI slop
 
@@ -116,26 +124,7 @@ Trace each suspected bug to a concrete triggering input before keeping it. When
 feasible, verify empirically: check out the PR branch in a scratch clone or
 worktree and run the relevant tests or a small repro.
 
-## Axis 3: Sufficient testing
-
-Judge coverage against the change's blast radius, informed by the
-test-landscape report:
-
-- Every new behavior and every fixed bug needs a test that fails without the
-  change. Scan the diff for branches no test reaches.
-- Tests must exercise the real code: no mocking the behavior under test (mock
-  only true external boundaries — network, third-party APIs, time, randomness);
-  assertions must be able to fail.
-- **Mission-critical or large implementation changes need end-to-end
-  coverage**: if the PR rewires a serving path, storage format, training
-  pipeline, or other load-bearing flow, unit tests on the new pieces are not
-  enough — add (or flag the absence of) a test that drives the whole flow, and
-  call it out prominently. A big change with only happy-path unit tests is a
-  finding, not a nit.
-- Match the repo's testing idioms (parametrize, existing fixtures, existing
-  harnesses) rather than inventing parallel scaffolding.
-
-## Axis 4: No repeated implementation
+## Axis 3: No repeated implementation
 
 Every substantive piece of new code gets checked against the duplication sweep:
 
@@ -149,9 +138,9 @@ Every substantive piece of new code gets checked against the duplication sweep:
 Only flag with the existing implementation in hand; "this feels like it must
 exist somewhere" is not a finding.
 
-## Axis 5: Should this be reusable?
+## Axis 4: Should this be reusable?
 
-The inverse of axis 4: the PR builds something genuinely new — should it live
+The inverse of axis 3: the PR builds something genuinely new — should it live
 where others can use it?
 
 - New logic buried in feature code that the reuse-candidates report shows other
@@ -163,7 +152,7 @@ where others can use it?
 - But respect YAGNI: one call site and no concrete second consumer → leave it
   where it is. Speculative generality is a finding in the other direction.
 
-## Axis 6: Style and convention
+## Axis 5: Style and convention
 
 Judge against the local codebase's conventions (the docs-and-conventions
 report), not personal taste. Flag egregious violations, not preferences:
@@ -173,7 +162,7 @@ report), not personal taste. Flag egregious violations, not preferences:
   establish. (Comment slop and AI boilerplate are covered under Axis 1.)
 - Anything a linter or CI already catches is not a finding — drop it.
 
-## Axis 7: Structural quality and design
+## Axis 6: Structural quality and design
 
 Does the diff make the codebase structurally better or worse? Look for "code
 judo": behavior-preserving reframings that delete whole branches, helpers, or
@@ -202,7 +191,7 @@ alternative in hand.
 Prefer remedies that delete complexity over rearranging it. "Maybe rename this"
 is not a structural finding.
 
-## Axis 8: File and project layout
+## Axis 7: File and project layout
 
 Judge how the change carves code into files, and where reusable logic and
 config land. Prefer this shape:
@@ -246,8 +235,7 @@ each candidate ticket to judge real reuse:
 ## Verify before reporting
 
 Adversarially check each candidate. Bugs: keep only with a concrete triggering
-input or sequence. Testing: keep only when you can name the untested behavior or
-flow. Slop: keep only if removal leaves the PR strictly better.
+input or sequence. Slop: keep only if removal leaves the PR strictly better.
 Duplication/reuse: keep only with the existing or destination code cited by
 `file:line`. Style: keep only egregious violations removal strictly improves.
 Structure/design: keep only with a specific behavior-preserving restructuring
@@ -264,25 +252,41 @@ Always drop:
   restructuring attached.
 - Issues explicitly silenced (e.g. lint-ignore).
 
-## Report: findings in the chat only
-
-Report the surviving findings to the user in the chat. **Never write to
-GitHub**: no review comments, no inline comments, no PR comments, no
-description edits, no pushes. If findings are later fixed, do not post
-updates or comments to the PR about the bugs being addressed either — the
-report in the chat is the only output.
+## Report
 
 1. Each finding follows:
    - **Location**: `file:line` (multi-line spans as `file:start-end`)
-   - **Axis**: slop, bug (high/medium/low), testing, duplication, reuse, style,
+   - **Axis**: slop, bug (high/medium/low), duplication, reuse, style,
      structure/design, or layout
-   - **Why**: bug → triggering scenario; testing → the uncovered behavior;
-     duplication/reuse → the existing or destination code; slop → what a human
-     would have written; style/design → the convention or simpler shape;
-     layout → the file/utils/config destination it should move to
+   - **Why**: bug → triggering scenario; duplication/reuse → the existing or
+     destination code; slop → what a human would have written; style/design →
+     the convention or simpler shape; layout → the file/utils/config
+     destination it should move to
    - **Fix**: concrete and minimal
-2. Order findings bugs → testing → structure/design → layout →
-   duplication/reuse → slop → style, by severity. Don't flood slop nits when
-   structural issues exist.
-3. Open with a one-line verdict (clean / minor cleanup / needs work), then the
-   findings. If nothing survives, say the PR looks clean.
+2. Order findings bugs → structure/design → layout → duplication/reuse → slop
+   → style, by severity. Don't flood slop nits when structural issues exist.
+3. Open with a one-line verdict — own PR: clean / minor cleanup / needs work;
+   teammate's PR: approve / approve with nits / needs work — then the
+   findings. If nothing survives, say the PR looks clean and name what was
+   checked.
+
+### Own PR: chat only
+
+**Never write to GitHub**: no review comments, no inline comments, no PR
+comments, no description edits, no pushes. If findings are later fixed, do not
+post updates or comments to the PR about the bugs being addressed either — the
+report in the chat is the only output.
+
+### Teammate's PR: chat, then GitHub only when asked
+
+Report in the chat first, phrased so William can paste each finding into a
+review as-is: specific and respectful. Post to GitHub only when William
+explicitly asks, and then:
+
+- Post one review with inline comments
+  (`gh api repos/<owner>/<repo>/pulls/<number>/reviews`, `commit_id` = head
+  SHA, `event: COMMENT`). Never `APPROVE` or `REQUEST_CHANGES` unless asked.
+- Start every comment the bot posts — the review body, each inline comment,
+  each reply — with the line `_this is Will's bee boo bot_` so the author knows
+  an agent wrote it.
+- Never push to their branch.

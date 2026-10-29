@@ -1,6 +1,6 @@
 ---
 name: format-code
-description: Reformat code to William's personal style preferences (naming, structure, comments, language idioms). Use when asked to format, restyle, or clean up the style of code. Style-only — never changes behavior; use quick-review or deep-review-my-pr for bug hunting.
+description: Reformat code to William's personal style preferences (naming, structure, comments, language idioms). Use when asked to format, restyle, or clean up the style of code. Style-only — never changes behavior; use quick-review or deep-review for bug hunting.
 ---
 
 # Format code to personal style
@@ -33,7 +33,7 @@ onto it:
   tool and keep its output. Apply the personal preferences below only where the
   tool leaves room (naming, structure, comments).
 - Behavior-preserving only. If you spot a bug while formatting, list it at the
-  end for follow-up — do not fix it in this pass (that's quick-review's or deep-review-my-pr's job).
+  end for follow-up — do not fix it in this pass (that's quick-review's or deep-review's job).
 - Keep diffs minimal: restyle the code in scope, don't reflow untouched files.
 
 ## Style preferences

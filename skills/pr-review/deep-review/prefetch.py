@@ -1,10 +1,11 @@
 #!/usr/bin/env python3
 """Prefetch everything the deep-review-pr workflow needs and emit a ready-to-run script.
 
-Usage: prefetch.py <pr-number|url> <mine|other> <skill-md-path>
+Usage: prefetch.py <pr-number|url> <skill-md-path>
 
 Run from inside the PR's repo. Fetches the PR head, diffs it locally (no
-GitHub diff-size or 100-file limits), pulls every existing comment, and splits
+GitHub diff-size or 100-file limits), pulls every existing comment, checks
+whether the PR is the current user's own, and splits
 the skill's rubric into per-agent sections. Those inputs are inlined into a
 per-run copy of deep-review-pr.js so subagents start reviewing on their first
 turn instead of spending turns on gh/Read. Prints the generated script's path.
@@ -68,7 +69,7 @@ def parse_json_stream(text: str) -> list:
 def pr_meta(pr: str) -> dict:
     meta = json.loads(run(
         "gh", "pr", "view", pr, "--json",
-        "number,title,body,url,headRefOid,baseRefName,baseRefOid,commits",
+        "number,title,body,url,author,headRefOid,baseRefName,baseRefOid,commits",
     ))
     match = re.match(r"https://github\.com/([^/]+)/([^/]+)/pull/\d+", meta["url"])
     if not match:
@@ -209,7 +210,6 @@ def build_run_script(template: Path, inputs: dict, out: Path) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("pr")
-    parser.add_argument("mode", choices=["mine", "other"])
     parser.add_argument("skill_md", type=Path)
     args = parser.parse_args()
 
@@ -224,12 +224,14 @@ def main() -> None:
         head = pool.submit(fetch_head, meta)
         comments = pool.submit(fetch_comments, meta)
         rubric = pool.submit(split_rubric, args.skill_md)
+        viewer = pool.submit(run, "gh", "api", "user", "-q", ".login")
         head.result()
         files = diff_files(meta)
         patches = write_patches(meta, files, tmp)
         inputs = {
             "pr": meta["number"],
-            "mode": args.mode,
+            "author": meta["author"]["login"],
+            "mine": meta["author"]["login"] == viewer.result().strip(),
             "headSha": meta["headRefOid"],
             "ctxDir": str(ctx),
             "repoDir": run("git", "rev-parse", "--show-toplevel").strip(),
