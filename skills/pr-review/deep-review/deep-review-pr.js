@@ -1,12 +1,12 @@
 export const meta = {
   name: 'deep-review-pr',
-  description: 'Deep-review a PR: sharded context lenses → per-axis finders + adversarial simplification → completeness critic and probes → adversarial verify, all streaming',
+  description: 'Deep-review a PR on three axes (bugs, simplification/structure, style): sharded lenses → finders → completeness critic and probes → adversarial verify with bug repros, all streaming',
   phases: [
     { title: 'Gather', detail: 'context lenses, sharded by file, all started at once' },
-    { title: 'Review', detail: 'one finder per axis (bugs split by focus), sharded by file; each starts when its lenses finish' },
+    { title: 'Review', detail: 'four bug finders per file shard, a structure finder, style finders per shard; each starts when its lenses finish' },
     { title: 'Simplify', detail: 'inventory the PR\'s components; a challenger per batch argues each one shouldn\'t exist' },
     { title: 'Probe', detail: 'a critic names what the first pass missed; one targeted finder per gap' },
-    { title: 'Verify', detail: 'a skeptic per finding, three skeptics per high/medium bug, two defenders per simplification' },
+    { title: 'Verify', detail: 'three skeptics per bug plus a repro for high/medium, two defenders per simplification, one skeptic per style finding' },
   ],
 }
 
@@ -23,6 +23,7 @@ const TUNING = {
   challenge: { effort: 'high' },
   verify: { agentType: 'Explore', model: 'sonnet', effort: 'low' },
   verifyBug: { effort: 'medium' },
+  repro: { effort: 'medium' },
   defend: { effort: 'medium' },
 }
 // Changed lines per shard for sharded lenses and axes. One huge file stays one shard.
@@ -48,31 +49,34 @@ const LENSES = [
 ]
 
 // Axis labels come from here, never from the model. `lenses` are the only
-// reports a finder waits on; `verifyLenses` are awaited by its verifiers
-// instead, off the finder's critical path. `family` groups axes whose findings
-// at overlapping lines are the same finding. Finders are listed in SKILL.md's
-// "## Report" order.
+// reports a finder waits on. `family` groups findings at overlapping lines as
+// the same finding. Finders are listed in SKILL.md's "## Report" order.
+// Correctness gets the most: four focused finders per file shard at high effort.
+const BUG_LENSES = ['Callers and contracts', 'History']
 const FINDERS = [
-  { axis: 2, label: 'bug', name: 'bug:completeness', family: 'bug', shard: true, tuning: TUNING.findBug,
-    focus: 'Completeness: every path the change should reach — callers and contracts not updated, branches and error paths the change missed, resource or state leaks.',
-    lenses: ['Callers and contracts'], verifyLenses: ['History'] },
-  { axis: 2, label: 'bug', name: 'bug:mechanism', family: 'bug', shard: true, tuning: TUNING.findBug,
-    focus: 'Mechanism: does the new logic do what the description says — wrong conditions, edge cases, races, and regressions against the prior behavior.',
-    lenses: ['History'], verifyLenses: ['Callers and contracts'] },
+  { axis: 1, label: 'bug', name: 'bug:completeness', family: 'bug', shard: true, tuning: TUNING.findBug,
+    lenses: [...BUG_LENSES, 'Linear lineage'], verifyLenses: BUG_LENSES,
+    focus: 'Completeness: does the PR do all of what its description and linked ticket promise; every path the change should reach — callers and contracts not updated, branches and error paths missed, resource or state leaks.' },
+  { axis: 1, label: 'bug', name: 'bug:mechanism', family: 'bug', shard: true, tuning: TUNING.findBug, lenses: BUG_LENSES, verifyLenses: BUG_LENSES,
+    focus: 'Mechanism and compatibility: does the new logic do what the description says — wrong conditions, edge cases, races, regressions against the prior behavior — and does it break clients, SDKs, older deployed versions, or persisted/serialized data and wire formats.' },
+  { axis: 1, label: 'bug', name: 'bug:removed-behavior', family: 'bug', shard: true, tuning: TUNING.findBug, lenses: BUG_LENSES, verifyLenses: BUG_LENSES,
+    focus: 'Removed behavior: everything the PR deletes, bypasses, or stops doing — code, branches, validation, side effects, defaults — and who still relies on it.' },
+  { axis: 1, label: 'bug', name: 'bug:operational', family: 'bug', shard: true, tuning: TUNING.findBug, lenses: BUG_LENSES, verifyLenses: BUG_LENSES,
+    focus: 'Operational: unbounded loops and waits with no timeout, retry storms, work lost or inconsistent on cancellation or partial failure, silent failures, status not propagated, missing authorization, config/secret/migration dependencies and deploy order, hot-path performance regressions.' },
+  { axis: 2, label: 'simplification', name: 'simplification:structure', family: 'shape',
+    focus: 'The change as a whole: structure and design, duplication, reuse, and file and project layout.',
+    lenses: ['Callers and contracts', 'Neighboring patterns', 'Duplication sweep', 'Reuse candidates', 'Linear lineage', 'Docs and conventions'] },
   // Not sharded by file: an inventory agent lists the PR's components and each
   // batch of them gets its own challenger (see simplifyRound).
-  { axis: 8, label: 'simplification', family: 'shape', inventory: true, tuning: TUNING.challenge,
+  { axis: 2, label: 'simplification', name: 'simplification:components', family: 'shape', inventory: true, tuning: TUNING.challenge,
+    focus: 'Whether each listed component needs to exist.',
     lenses: ['Docs and conventions', 'Duplication sweep', 'Neighboring patterns', 'Callers and contracts'] },
-  { axis: 6, label: 'structure/design', family: 'shape', lenses: ['Callers and contracts', 'Neighboring patterns'] },
-  { axis: 7, label: 'layout', family: 'shape', lenses: ['Docs and conventions', 'Neighboring patterns'] },
-  { axis: 3, label: 'duplication', family: 'shape', lenses: ['Duplication sweep', 'Neighboring patterns'] },
-  { axis: 4, label: 'reuse', family: 'shape', lenses: ['Reuse candidates', 'Linear lineage'] },
-  { axis: 1, label: 'slop', family: 'surface', shard: true, lenses: ['Docs and conventions', 'Past review comments'] },
-  { axis: 5, label: 'style', family: 'surface', lenses: ['Docs and conventions', 'Neighboring patterns', 'Past review comments'] },
+  { axis: 3, label: 'style', family: 'surface', shard: true,
+    lenses: ['Docs and conventions', 'Neighboring patterns', 'Past review comments'] },
 ]
 
-// A high/medium bug faces three skeptics and dies on a majority of refutes; a
-// simplification faces two defenders of the component and dies if either wins.
+// Every bug faces three skeptics (plus a repro for high/medium) and dies on a
+// majority of refutes; a simplification faces two defenders and dies if either wins.
 const PANELS = {
   bug: {
     angles: {
@@ -80,27 +84,27 @@ const PANELS = {
       intent: 'Check intent: do the PR description, commits, history, existing comments, or docs show this behavior is deliberate?',
       guard: 'Look for a guard: is it already prevented elsewhere — a caller that validates, a type that rules it out, framework behavior, a retry or fallback?',
     },
-    stance: 'Try to REFUTE this finding. Set refuted=true only with concrete evidence from your angle.',
+    stance: 'Try to REFUTE this finding. Set refuted=true only with concrete evidence from your angle. If it stands, rate its severity yourself (downgrade non-blockers) and give simpler_fix if the proposed fix overcomplicates the code.',
     kills: (refutes, cast) => refutes * 2 > cast,
   },
   simplification: {
     angles: {
-      behavior: 'Name behavior the replacement would lose: a caller, runtime path, or test that depends on the component, or a replacement that does not actually exist or does a different job at headSha.',
-      requirement: 'Name a requirement for the component: the PR description, a linked ticket or planned work, an AGENTS.md/CLAUDE.md rule, or a repo convention that prescribes this shape.',
+      behavior: 'Name behavior the replacement would lose: a caller, runtime path, or test that depends on the current code, or a replacement that does not actually exist or does a different job at headSha.',
+      requirement: 'Name a requirement for the current code: the PR description, a linked ticket or planned work, an AGENTS.md/CLAUDE.md rule, or a repo convention that prescribes this shape.',
     },
-    stance: 'Argue for KEEPING the component this finding wants removed or replaced. Set refuted=true only with concrete evidence (file:line, a quoted rule, a ticket); if the replacement loses nothing, set refuted=false.',
+    stance: 'Argue for KEEPING the code this finding wants removed, replaced, or restructured. Set refuted=true only with concrete evidence (file:line, a quoted rule, a ticket); if the replacement loses nothing, set refuted=false.',
     kills: refutes => refutes > 0,
   },
 }
-const panelFor = f => (f.axis === 'simplification' ? PANELS.simplification
-  : f.family === 'bug' && f.severity !== 'low' ? PANELS.bug : null)
+const panelFor = f => (f.family === 'bug' ? PANELS.bug : f.axis === 'simplification' ? PANELS.simplification : null)
 
 if (!INPUTS) {
   throw new Error('deep-review-pr: run the run.js that prefetch.py generates, not this template')
 }
 const missingLenses = LENSES.map(l => l.name).filter(n => !INPUTS.rubric.lens[n])
-if (missingLenses.length) {
-  throw new Error(`deep-review-pr: SKILL.md "Gather context" has no bullet for: ${missingLenses.join(', ')}`)
+const missingAxes = [...new Set(FINDERS.map(f => f.axis))].filter(n => !INPUTS.rubric.axis[n])
+if (missingLenses.length || missingAxes.length) {
+  throw new Error(`deep-review-pr: SKILL.md is missing lens bullets [${missingLenses.join(', ')}] or "## Axis N" sections [${missingAxes.join(', ')}]`)
 }
 
 const LENS_EXTRA = {
@@ -113,7 +117,7 @@ const LENS_EXTRA = {
 const RULES = `You are one subagent inside the deep-review-pr workflow for PR ${INPUTS.pr} at ${INPUTS.headSha}.
 ${INPUTS.mine
   ? 'This is William\'s own PR, about to go to human review: catch what a reviewer would.'
-  : `This is a teammate's PR (author ${INPUTS.author}): assume competence; structure/design and layout findings must clearly pay for the churn of restructuring their nearly-done work.`}
+  : `This is a teammate's PR (author ${INPUTS.author}): assume competence; simplification and structure findings must clearly pay for the churn of restructuring their nearly-done work.`}
 PR description (the spec):
 ${INPUTS.description}
 
@@ -144,7 +148,7 @@ const FINDINGS_SCHEMA = {
           end: { type: 'integer' },
           severity: { type: 'string', enum: ['high', 'medium', 'low'], description: 'bug/correctness only' },
           why: { type: 'string', description: 'one line, used as the summary' },
-          fix: { type: 'string' },
+          fix: { type: 'string', description: 'bugs: a minimal plain-text diff, naming any out-of-diff file it must touch' },
         },
       },
     },
@@ -191,6 +195,15 @@ const INVENTORY_SCHEMA = {
   },
 }
 
+const REPRO_SCHEMA = {
+  type: 'object',
+  required: ['outcome', 'reason'],
+  properties: {
+    outcome: { type: 'string', enum: ['reproduced', 'not_reproduced', 'could_not_run'] },
+    reason: { type: 'string', description: 'the command run and what it showed, or why it could not run' },
+  },
+}
+
 const VERDICT_SCHEMA = {
   type: 'object',
   required: ['refuted', 'duplicate_of_comment', 'reason'],
@@ -198,10 +211,13 @@ const VERDICT_SCHEMA = {
     refuted: { type: 'boolean' },
     duplicate_of_comment: { type: 'boolean' },
     reason: { type: 'string', description: 'evidence with file:line at headSha' },
+    severity: { type: 'string', enum: ['high', 'medium', 'low'], description: 'bugs only, if it stands: your own rating — downgrade non-blockers' },
+    simpler_fix: { type: 'string', description: 'bugs only, if it stands and the proposed fix overcomplicates the code: a simpler diff' },
   },
 }
 
 const SEVERITY_RANK = { high: 0, medium: 1, low: 2 }
+const REPRO_ROOT = `/tmp/deep-review-repro/${INPUTS.pr}-${INPUTS.headSha.slice(0, 12)}`
 
 // [null] means "the whole diff", so a sharded axis is never silently skipped.
 function shardFiles(files) {
@@ -229,7 +245,7 @@ function scopeText(paths) {
 }
 
 const overlaps = (a, b) => a.file === b.file && a.family === b.family && a.start <= b.end && b.start <= a.end
-const summary = ({ file, start, end, axis, severity, why, fix }) => ({ file, start, end, axis, severity, why, fix })
+const summary = ({ file, start, end, axis, severity, why, fix, simpler_fix, repro }) => ({ file, start, end, axis, severity, why, fix, simpler_fix, repro })
 
 // Within a file + family, overlapping findings collapse to the most severe
 // (ties: the earlier finder). Output is in report order.
@@ -298,7 +314,31 @@ ${DEPTH.verify}
 The ${f.axis} finding: ${JSON.stringify(raw)}`
 }
 
-function verifyFinding(raw, t, extra) {
+// The one agent allowed to write: a throwaway worktree outside the PR checkout.
+function reproPrompt(f, raw, dir) {
+  return `${RULES}
+
+You are the repro verifier for this bug: ${JSON.stringify(raw)}
+Exception to the read-only rule, for you only: you may create one scratch worktree and run tests or a small script in it.
+1. \`git -C ${INPUTS.repoDir} worktree add --detach ${dir} ${INPUTS.headSha}\`
+2. In ${dir}, run the narrowest existing test that exercises ${f.file}:${f.start}, or write a minimal repro test or script there
+   (never in ${INPUTS.repoDir}). Use the repo's own runner (see AGENTS.md, Makefile, bin/). Keep each command under about 5 minutes;
+   if it needs services, credentials, or a long build, stop and report could_not_run.
+3. Always clean up, even on failure: \`git -C ${INPUTS.repoDir} worktree remove --force ${dir}\`
+outcome: reproduced (you observed the claimed bad behavior), not_reproduced (the repro ran and behaved correctly), or could_not_run.`
+}
+
+// Upholding skeptics re-rate the bug (median, ties toward less severe) and may
+// offer a simpler fix than the finder's.
+function triage(f, cast) {
+  const upheld = cast.filter(v => !v.refuted)
+  const ratings = upheld.map(v => v.severity).filter(Boolean).sort((a, b) => SEVERITY_RANK[a] - SEVERITY_RANK[b])
+  const severity = ratings.length ? ratings[Math.floor(ratings.length / 2)] : f.severity
+  const simpler_fix = upheld.map(v => v.simpler_fix).find(Boolean)
+  return { ...f, severity, ...(simpler_fix ? { simpler_fix } : {}) }
+}
+
+function verifyFinding(raw, t, extra, index) {
   const f = { ...raw, axis: t.label, family: t.family, order: t.order }
   const label = `verify:${f.file}:${f.start}`
   const dupNote = 'Set duplicate_of_comment if an existing comment already raises it.'
@@ -309,20 +349,28 @@ function verifyFinding(raw, t, extra) {
       .then(v => ({ f, v }), () => ({ f, v: null }))
   }
   const tuning = panel === PANELS.bug ? TUNING.verifyBug : TUNING.defend
-  return parallel(Object.entries(panel.angles).map(([angle, text]) => () => agent(
+  const votes = parallel(Object.entries(panel.angles).map(([angle, text]) => () => agent(
     `${verifyPrompt(f, raw, extra)}\n${panel.stance}\nYour angle: ${text}\n${dupNote}`,
     { label: `${label}:${angle}`, phase: 'Verify', schema: VERDICT_SCHEMA, ...tuning })))
-    .then(votes => {
-      const cast = votes.filter(Boolean)
-      if (!cast.length) return { f, v: null }
-      const refutes = cast.filter(v => v.refuted).length
-      return { f, v: { refuted: panel.kills(refutes, cast.length), duplicate_of_comment: cast.some(v => v.duplicate_of_comment) } }
-    })
+  const dir = `${REPRO_ROOT}/${`${t.key}-${index}-${f.file}-${f.start}`.replace(/[^\w.-]+/g, '_')}`
+  const repro = panel === PANELS.bug && f.severity !== 'low'
+    ? agent(reproPrompt(f, raw, dir), { label: `${label}:repro`, phase: 'Verify', schema: REPRO_SCHEMA, ...TUNING.repro }).catch(() => null)
+    : Promise.resolve(null)
+  return Promise.all([votes, repro]).then(([all, run]) => {
+    const cast = all.filter(Boolean)
+    const ran = run != null && run.outcome !== 'could_not_run'
+    if (!cast.length && !ran) return { f, v: null }
+    const duplicate_of_comment = cast.some(v => v.duplicate_of_comment)
+    const triaged = panel === PANELS.bug ? triage(f, cast) : f
+    if (run?.outcome === 'reproduced') return { f: { ...triaged, repro: run.reason }, v: { refuted: false, duplicate_of_comment } }
+    const refutes = cast.filter(v => v.refuted).length + (ran ? 1 : 0)
+    return { f: triaged, v: { refuted: panel.kills(refutes, cast.length + (ran ? 1 : 0)), duplicate_of_comment } }
+  })
 }
 
 async function verifyAll(findings, t) {
   const extra = t.verifyLenses ? `\n\nContext:\n${await lensText(t.verifyLenses)}` : ''
-  return parallel(findings.map(raw => () => verifyFinding(raw, t, extra)))
+  return parallel(findings.map((raw, i) => () => verifyFinding(raw, t, extra, i)))
 }
 
 const tasks = FINDERS.flatMap((f, order) => {
@@ -374,7 +422,7 @@ const simplifyRound = runInventory().then(components => {
   log(`simplification: challenging ${components.length} components in ${batches.length} batches`)
   return batches.map((batch, i) => startTask({
     ...simplifier, order: FINDERS.indexOf(simplifier), components: batch, paths: [...new Set(batch.map(c => c.file))],
-    key: batches.length > 1 ? `simplification#${i + 1}` : 'simplification' }))
+    key: batches.length > 1 ? `${simplifier.name}#${i + 1}` : simplifier.name }))
 })
 const firstPass = simplifyRound.then(simplified => [...round1, ...simplified])
 

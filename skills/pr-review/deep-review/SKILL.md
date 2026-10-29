@@ -1,14 +1,14 @@
 ---
 name: deep-review
-description: Deep-review a pull request — yours before requesting human review, or a teammate's — for AI-generated slop, clear bugs, structural regressions, duplication of existing code, missed reuse opportunities, style/convention violations, file/project layout, better abstractions, and components that don't need to exist (adversarial simplification). Fans out subagents to search the codebase and docs, then reports findings with file:line in the chat. Use when asked to deep-review, self-review, bot-review, or peer-review a PR. Never writes to GitHub for William's own PRs; on a teammate's PR, posts only when explicitly asked, and every posted comment says it came from Will's bot.
+description: Deep-review a pull request — yours before requesting human review, or a teammate's — on three axes - correctness and bugs (the most resourced, with repro attempts), simplification and project structure (components that don't need to exist, duplication, reuse, design, layout), and style (AI slop, conventions). Fans out subagents to search the codebase and docs, then reports findings with file:line in the chat. Use when asked to deep-review, self-review, bot-review, or peer-review a PR. Never writes to GitHub for William's own PRs; on a teammate's PR, posts only when explicitly asked, and every posted comment says it came from Will's bot.
 ---
 
 # Deep-review a pull request
 
-Review a PR across every axis: AI slop a careful author wouldn't have written,
-clear bugs, duplication, missed reuse, style/convention, structural quality,
-file layout, and whether each component needs to exist at all. The same review runs on William's own PRs and on teammates'
-PRs; only the reporting differs (see "Whose PR it is").
+Review a PR on three axes: correctness and bugs, simplification and project
+structure, and style. Correctness matters most and gets the most review
+effort. The same review runs on William's own PRs and on teammates' PRs; only
+the reporting differs (see "Whose PR it is").
 
 ## In Claude Code: run the deep-review-pr workflow
 
@@ -33,8 +33,8 @@ current user (`gh api user -q .login`).
   GitHub.
 - **Teammate's PR**: this is a colleague's work, not a bot's — assume
   competence, judge against the codebase's actual conventions, and only report
-  findings a good human reviewer would bother to write. Structure/design and
-  layout findings must clearly pay for the churn of restructuring someone
+  findings a good human reviewer would bother to write. Simplification and
+  structure findings must clearly pay for the churn of restructuring someone
   else's nearly-done work. Post to GitHub only when explicitly asked, and
   never push to their branch.
 
@@ -89,150 +89,57 @@ current user (`gh api user -q .login`).
    consumers, or risks from the reports that no finding examined. Probe each
    gap with a fresh, targeted pass before verifying.
 
-## Axis 1: AI slop
-
-Test for every finding: would a careful human working in this codebase have
-written this? Matching existing patterns is not slop.
-
-- **Unnecessary comments**: restating the next line, narrating the change,
-  section headers (`# Parse the input`), docstrings paraphrasing the
-  signature. 
-  ***Exceptions***
-  - Short one or two sentence docstrings for complicated functions or
-  classes are FINE. 
-  - Paragraph long docstrings that summarize or explain how a file works are FINE. 
-- **AI boilerplate**: emoji, hedged naming (`enhanced_`, `_v2`), defensive
-  try/except or null checks around code that can't fail, re-validating
-  already-typed values.
-- **Low-value tests**: no assertion that would fail if the code broke;
-  mocking the behavior under test (mock only true external boundaries:
-  network, third-party APIs, time, randomness); tautological or
-  constant-literal assertions; generated permutation bulk; duplicated cases
-  that should be parameterized. Scrutinize tests as closely as production code.
-- **Gratuitous helpers**: single-use helpers fragmenting a straightforward
-  flow; wrappers renaming an existing API; premature abstraction. Inline beats
-  a helper without real reuse or a separable concern — but check the roadmap
-  first (see "Helper placement").
-- **Floating imports**: imports in the middle of a function or class, or inside
-  a loop. Imports belong at the top of the file unless they are conditional on
-  a runtime check.
-- **Unnecessary type hints**: redundant with the signature, or a trivial
-  `Any`/`object`/`dict`/`list`. Type hints should clarify, not clutter.
-
-## Axis 2: Correctness and clear bugs
+## Axis 1: Correctness and bugs
 
 Using the PR's stated intent as the spec:
 
+- Task completeness: the PR does all of what its description and linked
+  ticket promise, correctly — no stubbed paths, half-wired flags, or cases the
+  description names but the code skips.
 - Logic: wrong operator, off-by-one, inverted condition, unreachable branches,
   code not doing what the description says.
 - Edge cases: empty/None, zero, negative, unicode, timezone, first/last
   iteration, error paths.
-- Error handling: swallowed exceptions, missing cleanup, resource leaks.
+- Error handling: swallowed exceptions, missing cleanup, resource leaks;
+  silent failures (bad state or misconfig that returns a default instead of
+  raising); status or retry information not propagated to the caller.
 - State/concurrency: races, check-then-act, shared or default-arg mutation.
 - Interface misuse: wrong argument order, mismatched types, callers not updated
   for a signature or contract change (use the callers-and-contracts report — the bug is
   often in an untouched caller).
-- Security: injection, secrets in code or logs, unvalidated input, unsafe
+- Compatibility: clients, SDKs, or services on the other side of an API the
+  change breaks — including older versions still deployed — and persisted or
+  serialized data and wire formats the new code can no longer read or write.
+- Security: missing authorization (any user acting on another's resource),
+  injection, secrets in code or logs, unvalidated input, unsafe
   deserialization, path traversal.
+- Removed behavior: code, branches, validation, side effects, or defaults the
+  PR deletes, bypasses, or stops doing that a caller, test, or runtime path
+  still relies on.
+- Operational: unbounded loops or waits with no timeout, retries that can
+  storm, work lost or left inconsistent on cancellation, interruption, or
+  partial failure, code that needs a config, secret, or migration in place
+  first (deploy order, version skew), performance regressions on hot paths.
 
 Trace each suspected bug to a concrete triggering input before keeping it. When
-feasible, verify empirically: check out the PR branch in a scratch clone or
-worktree and run the relevant tests or a small repro.
+feasible, verify empirically: check out the PR head in a scratch worktree and
+run the relevant tests or a small repro.
 
-## Axis 3: No repeated implementation
+Give each fix as a minimal plain-text diff. Fixes belong in the PR's own
+files: when a bug needs a change outside the diff (an untouched caller), anchor
+the finding on the changed line that causes it and name the out-of-diff file
+that must change. Size the fix to the bug — a fix that complicates the code
+more than the bug costs is the wrong fix.
 
-Every substantive piece of new code gets checked against the duplication sweep:
+## Axis 2: Simplification and project structure
 
-- Re-implementing a canonical utility, helper, or pattern that already exists →
-  point at the existing one by `file:line` and use it instead.
-- Copy-paste from elsewhere in the repo with small edits → extract or reuse the
-  original.
-- Duplicating constants, schemas, or config already defined once — especially
-  dangerous when the two copies can drift.
+Does the change need all of its parts, and does it leave the codebase's
+structure better or worse? Two passes: each component's right to exist, and
+the shape of the change as a whole — design, duplication and reuse, and where
+code and config live. Flag only changed code, and only with a concrete
+behavior-preserving alternative in hand.
 
-Only flag with the existing implementation in hand; "this feels like it must
-exist somewhere" is not a finding.
-
-## Axis 4: Should this be reusable?
-
-The inverse of axis 3: the PR builds something genuinely new — should it live
-where others can use it?
-
-- New logic buried in feature code that the reuse-candidates report shows other
-  call sites (or concrete planned work) also need → promote it to the canonical
-  shared module, named and typed for both callers.
-- Almost-general code with one caller's assumptions baked in (hardcoded paths,
-  feature-specific types in an otherwise generic function) → make the small
-  generalization now, while it's cheap.
-- But respect YAGNI: one call site and no concrete second consumer → leave it
-  where it is. Speculative generality is a finding in the other direction.
-
-## Axis 5: Style and convention
-
-Judge against the local codebase's conventions (the docs-and-conventions
-report), not personal taste. Flag egregious violations, not preferences:
-
-- Convention breaks: naming, error-handling, typing, or module-layout patterns
-  that contradict what the surrounding code and the repo's agent/style docs
-  establish. (Comment slop and AI boilerplate are covered under Axis 1.)
-- Anything a linter or CI already catches is not a finding — drop it.
-
-## Axis 6: Structural quality and design
-
-Does the diff make the codebase structurally better or worse? Look for "code
-judo": behavior-preserving reframings that delete whole branches, helpers, or
-layers — not local polish. Flag only changed code, and only with a concrete
-alternative in hand.
-
-- **Missed simplification**: a reframing would delete whole categories of
-  complexity; refactors that move complexity without reducing concepts.
-- **Spaghetti growth**: ad-hoc conditionals bolted onto unrelated flows; one-off
-  flags or modes tangling existing control flow; edge cases dropped into
-  already busy functions.
-- **File bloat**: pushing a file past 1000 lines — presumptive blocker; decompose
-  first.
-- **Abstraction problems**: thin wrappers adding indirection without clarity;
-  "magic" mechanisms hiding simple data shapes. Prefer direct, boring code.
-- **Repo-native patterns**: a pattern the codebase already uses for this exact
-  shape of problem (registry, visitor, config dataclass, trait/protocol,
-  pipeline stage) that the PR hand-rolls around.
-- **Boundary erosion**: new casts, `any`/`unknown`, needless optionality, or
-  silent fallbacks obscuring the real invariant.
-- **Wrong layer / duplication**: feature logic leaking into shared paths;
-  bespoke helpers duplicating a canonical utility.
-- **Orchestration**: needlessly serialized independent work; non-atomic updates
-  where an atomic structure is obvious.
-
-Prefer remedies that delete complexity over rearranging it. "Maybe rename this"
-is not a structural finding.
-
-## Axis 7: File and project layout
-
-Judge how the change carves code into files, and where reusable logic and
-config land. Prefer this shape:
-
-- **Small, modular files with descriptive names.** A file should be about one
-  thing, and its name should say what. Flag a new or grown file that mixes a
-  grab-bag of unrelated helpers in with the module's core functions — split
-  the helpers out into their own well-named file rather than stapling them onto
-  the core one.
-- **Reusable logic lives in a utils file or folder.** When a function is used
-  significantly across a module (not just once), it belongs in that module's
-  `utils` file or folder, not inlined next to one caller. A single `utils.py`
-  is fine until it sprawls; past that, prefer a `utils/` folder split by
-  concern.
-- **Centralized config.** Config values and env-var reads belong in one central
-  config file per project/module where they can be tuned later — not scattered
-  as literals and `os.environ[...]`/`process.env...` reads across random files.
-  Flag new tunables or env lookups added outside the config file, and point at
-  the config file they should move to.
-
-Only flag with the concrete destination in hand (the file to split into, the
-utils location, the config file). Match an existing project layout over
-imposing this one — if the repo already has a settled convention, judge against
-that and note the divergence.
-
-## Axis 8: Simplification — does each component need to exist?
+### Does each component need to exist?
 
 Adapted from `/simplify`. List every component the PR adds or grows — files,
 classes, functions, parameters and flags, config keys and env vars, constants,
@@ -263,8 +170,135 @@ Challenge each component from five angles:
 
 A challenge is a finding only with a behavior-preserving replacement in hand:
 delete it, call `X` at `file:line`, inline it, derive it from `Y`, merge it
-into `Z`, or move the fix into mechanism `M`. Axis 6 judges the shape of the
-change as a whole; this axis judges each component's right to exist.
+into `Z`, or move the fix into mechanism `M`.
+
+### Duplication
+
+Every substantive piece of new code gets checked against the duplication sweep:
+
+- Re-implementing a canonical utility, helper, or pattern that already exists →
+  point at the existing one by `file:line` and use it instead.
+- Copy-paste from elsewhere in the repo with small edits → extract or reuse the
+  original.
+- Duplicating constants, schemas, or config already defined once — especially
+  dangerous when the two copies can drift.
+
+Only flag with the existing implementation in hand; "this feels like it must
+exist somewhere" is not a finding.
+
+### Reuse
+
+The inverse of duplication: the PR builds something genuinely new — should it
+live where others can use it?
+
+- New logic buried in feature code that the reuse-candidates report shows other
+  call sites (or concrete planned work) also need → promote it to the canonical
+  shared module, named and typed for both callers.
+- Almost-general code with one caller's assumptions baked in (hardcoded paths,
+  feature-specific types in an otherwise generic function) → make the small
+  generalization now, while it's cheap.
+- But respect YAGNI: one call site and no concrete second consumer → leave it
+  where it is. Speculative generality is a finding in the other direction.
+
+### Structure and design
+
+Does the diff make the codebase structurally better or worse? Look for "code
+judo": behavior-preserving reframings that delete whole branches, helpers, or
+layers — not local polish. Flag only changed code, and only with a concrete
+alternative in hand.
+
+- **Missed simplification**: a reframing would delete whole categories of
+  complexity; refactors that move complexity without reducing concepts.
+- **Spaghetti growth**: ad-hoc conditionals bolted onto unrelated flows; one-off
+  flags or modes tangling existing control flow; edge cases dropped into
+  already busy functions.
+- **File bloat**: pushing a file past 1000 lines — presumptive blocker; decompose
+  first.
+- **Abstraction problems**: thin wrappers adding indirection without clarity;
+  "magic" mechanisms hiding simple data shapes. Prefer direct, boring code.
+- **Repo-native patterns**: a pattern the codebase already uses for this exact
+  shape of problem (registry, visitor, config dataclass, trait/protocol,
+  pipeline stage) that the PR hand-rolls around.
+- **Boundary erosion**: new casts, `any`/`unknown`, needless optionality, or
+  silent fallbacks obscuring the real invariant.
+- **Wrong layer / duplication**: feature logic leaking into shared paths;
+  bespoke helpers duplicating a canonical utility.
+- **Orchestration**: needlessly serialized independent work; non-atomic updates
+  where an atomic structure is obvious.
+
+Prefer remedies that delete complexity over rearranging it. "Maybe rename this"
+is not a structural finding.
+
+### File and project layout
+
+Judge how the change carves code into files, and where reusable logic and
+config land. Prefer this shape:
+
+- **Small, modular files with descriptive names.** A file should be about one
+  thing, and its name should say what. Flag a new or grown file that mixes a
+  grab-bag of unrelated helpers in with the module's core functions — split
+  the helpers out into their own well-named file rather than stapling them onto
+  the core one.
+- **Reusable logic lives in a utils file or folder.** When a function is used
+  significantly across a module (not just once), it belongs in that module's
+  `utils` file or folder, not inlined next to one caller. A single `utils.py`
+  is fine until it sprawls; past that, prefer a `utils/` folder split by
+  concern.
+- **Centralized config.** Config values and env-var reads belong in one central
+  config file per project/module where they can be tuned later — not scattered
+  as literals and `os.environ[...]`/`process.env...` reads across random files.
+  Flag new tunables or env lookups added outside the config file, and point at
+  the config file they should move to.
+
+Only flag with the concrete destination in hand (the file to split into, the
+utils location, the config file). Match an existing project layout over
+imposing this one — if the repo already has a settled convention, judge against
+that and note the divergence.
+
+## Axis 3: Style
+
+AI slop a careful author wouldn't have written, and breaks from the codebase's
+own conventions.
+
+### AI slop
+
+Test for every finding: would a careful human working in this codebase have
+written this? Matching existing patterns is not slop.
+
+- **Unnecessary comments**: restating the next line, narrating the change,
+  section headers (`# Parse the input`), docstrings paraphrasing the
+  signature. 
+  ***Exceptions***
+  - Short one or two sentence docstrings for complicated functions or
+  classes are FINE. 
+  - Paragraph long docstrings that summarize or explain how a file works are FINE. 
+- **AI boilerplate**: emoji, hedged naming (`enhanced_`, `_v2`), defensive
+  try/except or null checks around code that can't fail, re-validating
+  already-typed values.
+- **Low-value tests**: no assertion that would fail if the code broke;
+  mocking the behavior under test (mock only true external boundaries:
+  network, third-party APIs, time, randomness); tautological or
+  constant-literal assertions; generated permutation bulk; duplicated cases
+  that should be parameterized. Scrutinize tests as closely as production code.
+- **Gratuitous helpers**: single-use helpers fragmenting a straightforward
+  flow; wrappers renaming an existing API; premature abstraction. Inline beats
+  a helper without real reuse or a separable concern — but check the roadmap
+  first (see "Helper placement").
+- **Floating imports**: imports in the middle of a function or class, or inside
+  a loop. Imports belong at the top of the file unless they are conditional on
+  a runtime check.
+- **Unnecessary type hints**: redundant with the signature, or a trivial
+  `Any`/`object`/`dict`/`list`. Type hints should clarify, not clutter.
+
+### Convention
+
+Judge against the local codebase's conventions (the docs-and-conventions
+report), not personal taste. Flag egregious violations, not preferences:
+
+- Convention breaks: naming, error-handling, typing, or module-layout patterns
+  that contradict what the surrounding code and the repo's agent/style docs
+  establish.
+- Anything a linter or CI already catches is not a finding — drop it.
 
 ## Helper placement: check the roadmap
 
@@ -283,21 +317,30 @@ each candidate ticket to judge real reuse:
 
 ## Verify before reporting
 
-Adversarially check each candidate. A high or medium bug gets three
-independent skeptics — one traces whether the triggering input really reaches
-the line, one checks whether the behavior is intentional (description,
-history, comments, docs), one looks for a guard elsewhere (a caller, a type, a
-framework) — and it survives unless a majority refute it. A simplification
-finding gets two defenders arguing to keep the component — one names behavior
-the replacement would lose (callers, runtime paths, tests), one names a
-requirement for it (description, ticket, AGENTS.md, roadmap) — and it dies if
-either makes its case with concrete evidence. Bugs: keep only with a concrete triggering
-input or sequence. Slop: keep only if removal leaves the PR strictly better.
-Duplication/reuse: keep only with the existing or destination code cited by
-`file:line`. Style: keep only egregious violations removal strictly improves.
-Structure/design: keep only with a specific behavior-preserving restructuring
-whose payoff exceeds the churn. Drop duplicates of existing review comments. A
-short list of real findings beats a long list of maybes.
+Adversarially check each candidate, with the most effort on bugs:
+
+- **Bugs** (every severity) get three independent skeptics — one traces
+  whether the triggering input really reaches the line, one checks whether the
+  behavior is intentional (description, history, comments, docs), one looks
+  for a guard elsewhere (a caller, a type, a framework). A high or medium bug
+  also gets a repro attempt: a scratch worktree at the PR head running the
+  narrowest test or a small repro. A reproduced bug always survives; otherwise
+  it dies if a majority of the skeptics and a failed repro refute it. Skeptics
+  that uphold a bug also re-rate its severity (downgrading non-blockers; the
+  median rating wins) and offer a simpler fix when the proposed one
+  overcomplicates the code. Keep only with a concrete triggering input or
+  sequence.
+- **Simplification and structure** findings get two defenders arguing for the
+  current code — one names behavior the replacement would lose (callers,
+  runtime paths, tests), one names a requirement for it (description, ticket,
+  AGENTS.md, roadmap) — and die if either makes its case with concrete
+  evidence. Keep only with the replacement, existing code, or destination
+  cited by `file:line`, and a payoff that exceeds the churn.
+- **Style** findings get one skeptic. Keep slop only if removal leaves the PR
+  strictly better, and convention breaks only when egregious.
+
+Drop duplicates of existing review comments. A short list of real findings
+beats a long list of maybes.
 
 Always drop:
 
@@ -313,16 +356,16 @@ Always drop:
 
 1. Each finding follows:
    - **Location**: `file:line` (multi-line spans as `file:start-end`)
-   - **Axis**: slop, bug (high/medium/low), simplification, duplication,
-     reuse, style, structure/design, or layout
-   - **Why**: bug → triggering scenario; simplification → the angle and what
-     replaces the component; duplication/reuse → the existing or
-     destination code; slop → what a human would have written; style/design →
-     the convention or simpler shape; layout → the file/utils/config
-     destination it should move to
-   - **Fix**: concrete and minimal
-2. Order findings bugs → simplification → structure/design → layout →
-   duplication/reuse → slop → style, by severity. Don't flood slop nits when structural issues exist.
+   - **Axis**: bug (high/medium/low), simplification, or style
+   - **Why**: bug → triggering scenario, and the repro result if one ran
+     (and any out-of-diff file the fix needs);
+     simplification → what replaces the component, the existing code to
+     reuse, the simpler shape, or the file/config destination; style → what
+     a careful human would have written, or the convention broken
+   - **Fix**: concrete and minimal — a plain-text diff for bugs; prefer the
+     verifiers' simpler fix when one was offered
+2. Order findings bugs → simplification → style, by severity. Don't flood
+   style nits when bugs or structural issues exist.
 3. Open with a one-line verdict — own PR: clean / minor cleanup / needs work;
    teammate's PR: approve / approve with nits / needs work — then the
    findings. If nothing survives, say the PR looks clean and name what was
