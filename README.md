@@ -82,7 +82,8 @@ Current skills:
 - **helpers/** — `low-level-plan`, `save-plan`, `rebase-with-parent`,
   `push-stacked-pr`, `prune-worktrees`, `open-pr-vscode`, `import-session`,
   `write-aster-linear-ticket`, `push-dotfiles-data`, `download-to-mac` (devbox →
-  mac file copy through the kitchen's `download` plugin).
+  mac file copy through the kitchen's `download` plugin), `create-devbox` (large
+  devbox with 500 GiB Home Storage).
 - **style/** — `format-code` (my personal style; the editable "Style preferences"
   section in its `SKILL.md`, deferring to project formatter configs),
   `short-nice-response`, and `simple-english`, vendored unmodified from
