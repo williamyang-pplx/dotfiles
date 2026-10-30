@@ -1,6 +1,6 @@
 ---
 name: create-devbox
-description: Create a new large devbox with the `devbox` CLI and grow its Home Storage to 500 GiB. Use when asked to create, spin up, or make a new devbox (e.g. "/create-devbox", "make me a new devbox called foo").
+description: Create a new large devbox with the `devbox` CLI, grow its Home Storage to 500 GiB, and open a kitchen workspace on it. Use when asked to create, spin up, or make a new devbox (e.g. "/create-devbox", "make me a new devbox called foo").
 ---
 
 # Create devbox
@@ -40,8 +40,23 @@ provisioning, wait for `devbox info <name>` to show it running and retry.
 `devbox change <name>` (no flags) prints the storage state; Home Storage
 `Observed` and `PVC capacity` must both read 500 GiB.
 
+## 5. Create a kitchen workspace
+
+`devbox create` already added an SSH alias named `<name>` to `~/.ssh/config`,
+and it cloned the repo to `~/<repo name>` on the box (`~/agi` by default).
+Open a kitchen workspace on that checkout, named after the devbox:
+
+```bash
+kitchenctl workspace new --host <name> --repo ~/agi --name <name>
+```
+
+Use the matching `~/<repo name>` if the box was created with `--repo`. Then
+confirm `kitchenctl --json workspace list` shows a workspace with
+`host: <name>`.
+
 ## Report
 
 - The devbox name and status.
 - Home Storage and Docker Storage sizes.
+- The kitchen workspace name and repo path.
 - How to connect: `devbox ssh <name>`.

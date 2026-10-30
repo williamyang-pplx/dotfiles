@@ -84,7 +84,7 @@ Current skills:
   `write-aster-linear-ticket`, `push-dotfiles-data` (push to `main`, then pull
   and rerun `install.sh` on this mac and every kitchen devbox), `download-to-mac`
   (devbox → mac file copy through the kitchen's `download` plugin), `create-devbox`
-  (large devbox with 500 GiB Home Storage).
+  (large devbox with 500 GiB Home Storage and a kitchen workspace).
 - **style/** — `format-code` (my personal style; the editable "Style preferences"
   section in its `SKILL.md`, deferring to project formatter configs),
   `short-nice-response`, and `simple-english`, vendored unmodified from
